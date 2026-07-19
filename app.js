@@ -102,4 +102,4 @@ app.get('/logout', (req, res) => {
     res.redirect('/login');
 });
 
-app.listen(3000, () => console.log('Velo Producción activo en: http://localhost:3000/login'));
+app.listen(process.env.PORT || 3000, () => console.log('Velo Producción activo en el puerto correcto'));
