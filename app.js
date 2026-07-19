@@ -3,12 +3,12 @@ const { Pool } = require('pg');
 const session = require('express-session');
 const app = express();
 
+// Conexión a la base de datos usando la variable de entorno de Neon
 const pool = new Pool({
-    user: 'postgres',
-    host: 'localhost',
-    database: 'postgres',
-    password: 'postgres', 
-    port: 5432,
+    connectionString: process.env.DATABASE_URL,
+    ssl: {
+        rejectUnauthorized: false
+    }
 });
 
 app.use(express.urlencoded({ extended: true }));
@@ -40,6 +40,7 @@ app.get('/login', (req, res) => {
                 <input type="password" name="password" placeholder="Clave" required><br>
                 <button type="submit">Entrar</button>
             </form>
+            <br><a href="/register">¿No tenés cuenta? Registrate</a>
         </div></body></html>`);
 });
 
@@ -52,6 +53,31 @@ app.post('/login', async (req, res) => {
         res.redirect('/feed');
     } else {
         res.send('Credenciales incorrectas. <a href="/login">Volver</a>');
+    }
+});
+
+// --- RUTA DE REGISTRO ---
+app.get('/register', (req, res) => {
+    res.send(`<html><head><link rel="stylesheet" href="/style.css"></head>
+        <body><div class="glass-card">
+            <h1>Registro Velo</h1>
+            <form action="/register" method="POST">
+                <input type="text" name="nombre" placeholder="Nombre" required><br>
+                <input type="email" name="email" placeholder="Email" required><br>
+                <input type="password" name="password" placeholder="Clave" required><br>
+                <button type="submit">Registrarse</button>
+            </form>
+        </div></body></html>`);
+});
+
+app.post('/register', async (req, res) => {
+    const { nombre, email, password } = req.body;
+    try {
+        await pool.query('INSERT INTO usuarios (nombre, email, password, membresia) VALUES ($1, $2, $3, $4)', 
+                         [nombre, email, password, 'free']);
+        res.send('Usuario registrado. <a href="/login">Ir al Login</a>');
+    } catch (err) {
+        res.send('Error al registrar. <a href="/register">Volver</a>');
     }
 });
 
@@ -102,4 +128,4 @@ app.get('/logout', (req, res) => {
     res.redirect('/login');
 });
 
-app.listen(process.env.PORT || 3000, () => console.log('Velo Producción activo en el puerto correcto'));
+app.listen(process.env.PORT || 3000, () => console.log('Velo Producción activo'));
