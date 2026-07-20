@@ -3,31 +3,24 @@ const { Pool } = require('pg');
 const session = require('express-session');
 const app = express();
 
-// Conexión a la base de datos usando la variable de entorno de Neon
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
-    ssl: {
-        rejectUnauthorized: false
-    }
+    ssl: { rejectUnauthorized: false }
 });
 
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static('public'));
 
-// Configuración de la sesión
 app.use(session({
     secret: 'velo-secreto-2026',
     resave: false,
     saveUninitialized: false
 }));
 
-// MIDDLEWARE para proteger rutas
 const requireLogin = (req, res, next) => {
     if (!req.session.user) return res.redirect('/login');
     next();
 };
-
-// --- RUTAS DE AUTENTICACIÓN ---
 
 app.get('/', (req, res) => res.redirect('/login'));
 
@@ -45,18 +38,20 @@ app.get('/login', (req, res) => {
 });
 
 app.post('/login', async (req, res) => {
-    const { email, password } = req.body;
-    const result = await pool.query('SELECT * FROM usuarios WHERE email = $1 AND password = $2', [email, password]);
-    
-    if (result.rows.length > 0) {
-        req.session.user = result.rows[0]; 
-        res.redirect('/feed');
-    } else {
-        res.send('Credenciales incorrectas. <a href="/login">Volver</a>');
+    try {
+        const { email, password } = req.body;
+        const result = await pool.query('SELECT * FROM usuarios WHERE email = $1 AND password = $2', [email, password]);
+        if (result.rows.length > 0) {
+            req.session.user = result.rows[0];
+            res.redirect('/feed');
+        } else {
+            res.send('Credenciales incorrectas. <a href="/login">Volver</a>');
+        }
+    } catch (err) {
+        res.send('Error en login: ' + err.message);
     }
 });
 
-// --- RUTA DE REGISTRO ---
 app.get('/register', (req, res) => {
     res.send(`<html><head><link rel="stylesheet" href="/style.css"></head>
         <body><div class="glass-card">
@@ -65,62 +60,65 @@ app.get('/register', (req, res) => {
                 <input type="text" name="nombre" placeholder="Nombre" required><br>
                 <input type="email" name="email" placeholder="Email" required><br>
                 <input type="password" name="password" placeholder="Clave" required><br>
+                <input type="url" name="foto_url" placeholder="URL de tu foto de rostro" required><br>
+                <p style="color:white;">* Obligatorio: Pega el link de tu foto.</p>
                 <button type="submit">Registrarse</button>
             </form>
         </div></body></html>`);
 });
 
 app.post('/register', async (req, res) => {
-    const { nombre, email, password } = req.body;
+    const { nombre, email, password, foto_url } = req.body;
     try {
         await pool.query('INSERT INTO usuarios (nombre, email, password, membresia) VALUES ($1, $2, $3, $4)', 
                          [nombre, email, password, 'free']);
-        res.send('Usuario registrado. <a href="/login">Ir al Login</a>');
+        await pool.query('INSERT INTO fotos (usuario_email, url_foto, tipo) VALUES ($1, $2, $3)', 
+                         [email, foto_url, 'galeria']);
+        
+        res.send('Usuario registrado con éxito. <a href="/login">Ir al Login</a>');
     } catch (err) {
-        res.send('Error al registrar. <a href="/register">Volver</a>');
+        res.send('Error al registrar: ' + err.message + '. <a href="/register">Volver</a>');
     }
 });
 
-// --- EL CORAZÓN DE LA APP (Protegido) ---
-
 app.get('/feed', requireLogin, async (req, res) => {
-    const result = await pool.query('SELECT nombre, email FROM usuarios');
-    const cards = result.rows.map(u => `
-        <div style="background:rgba(255,255,255,0.05); padding:15px; border-radius:15px; text-align:center; width:150px;">
-            <div style="width:80px; height:80px; background:#333; border-radius:50%; margin:0 auto 10px;"></div>
-            <p style="margin:0; font-weight:bold;">${u.nombre}</p>
-            <a href="/perfil/${u.email}" style="color:#d4af37; text-decoration:none;">Ver perfil</a>
-        </div>`).join('');
+    try {
+        const result = await pool.query('SELECT u.nombre, u.email, f.url_foto FROM usuarios u LEFT JOIN fotos f ON u.email = f.usuario_email WHERE f.tipo = $1', ['galeria']);
+        const cards = result.rows.map(u => `
+            <div style="background:rgba(255,255,255,0.05); padding:15px; border-radius:15px; text-align:center; width:150px;">
+                <img src="${u.url_foto}" style="width:80px; height:80px; border-radius:50%; object-fit:cover; margin-bottom:10px;">
+                <p style="margin:0; font-weight:bold;">${u.nombre}</p>
+                <a href="/perfil/${u.email}" style="color:#d4af37; text-decoration:none;">Ver perfil</a>
+            </div>`).join('');
 
-    res.send(`<html><head><link rel="stylesheet" href="/style.css"></head><body>
-        <div class="glass-card" style="width: 90%;">
-            <h1>Velo Feed - Bienvenido ${req.session.user.nombre}</h1>
-            <div style="display:flex; gap:20px; flex-wrap:wrap; justify-content:center;">${cards}</div>
-            <br><a href="/logout" style="color:white;">Cerrar sesión</a>
-        </div></body></html>`);
+        res.send(`<html><head><link rel="stylesheet" href="/style.css"></head><body>
+            <div class="glass-card" style="width: 90%;">
+                <h1>Velo Feed - Bienvenido ${req.session.user.nombre}</h1>
+                <div style="display:flex; gap:20px; flex-wrap:wrap; justify-content:center;">${cards}</div>
+                <br><a href="/logout" style="color:white;">Cerrar sesión</a>
+            </div></body></html>`);
+    } catch (err) {
+        res.send('Error cargando feed: ' + err.message);
+    }
 });
 
 app.get('/perfil/:email', requireLogin, async (req, res) => {
-    const { email } = req.params;
-    const usuario = (await pool.query('SELECT * FROM usuarios WHERE email = $1', [email])).rows[0];
-    const fotos = (await pool.query('SELECT * FROM fotos WHERE usuario_email = $1 AND tipo = $2', [email, 'galeria'])).rows;
-    const videos = (await pool.query('SELECT * FROM fotos WHERE usuario_email = $1 AND tipo = $2', [email, 'video'])).rows;
-    
-    const v = req.session.user.membresia;
+    try {
+        const { email } = req.params;
+        const usuario = (await pool.query('SELECT * FROM usuarios WHERE email = $1', [email])).rows[0];
+        const fotos = (await pool.query('SELECT * FROM fotos WHERE usuario_email = $1 AND tipo = $2', [email, 'galeria'])).rows;
+        
+        let galeriaHTML = fotos.map(f => `<img src="${f.url_foto}" style="width:150px; margin:5px; border-radius:10px;">`).join('');
 
-    let galeriaHTML = v === 'free' ? '<div style="background:rgba(255,255,255,0.1); padding:20px; border-radius:10px;">🔒 Contenido Premium necesario.</div>' : 
-                      fotos.map(f => `<img src="${f.url_foto}" style="width:80px; margin:5px; border-radius:10px;">`).join('');
-
-    let videosHTML = v === 'premium_plus' ? (videos.length > 0 ? videos.map(v => `<div style="margin:5px;">📹 Video: ${v.url_foto}</div>`).join('') : '<p>Sin videos.</p>') :
-                     '<div style="background:rgba(212,175,55,0.1); padding:20px; border-radius:10px; border:1px solid #d4af37;">✨ Solo para Premium+</div>';
-
-    res.send(`<html><head><link rel="stylesheet" href="/style.css"></head><body>
-        <div class="glass-card">
-            <h1>Perfil de ${usuario.nombre}</h1>
-            <h3>Galería</h3>${galeriaHTML}
-            <hr><h3>Videos Exclusivos</h3>${videosHTML}
-            <br><a href="/feed" style="color:white;">Volver al Feed</a>
-        </div></body></html>`);
+        res.send(`<html><head><link rel="stylesheet" href="/style.css"></head><body>
+            <div class="glass-card">
+                <h1>Perfil de ${usuario.nombre}</h1>
+                <h3>Galería</h3>${galeriaHTML}
+                <br><a href="/feed" style="color:white;">Volver al Feed</a>
+            </div></body></html>`);
+    } catch (err) {
+        res.send('Error cargando perfil: ' + err.message);
+    }
 });
 
 app.get('/logout', (req, res) => {
