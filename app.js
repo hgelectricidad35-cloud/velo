@@ -85,7 +85,6 @@ app.get('/register', (req, res) => {
 });
 
 app.post('/register', upload.single('foto'), async (req, res) => {
-    console.log("Iniciando proceso de registro...");
     try {
         if (!req.file) throw new Error('No se subió ninguna imagen.');
         
@@ -100,8 +99,7 @@ app.post('/register', upload.single('foto'), async (req, res) => {
         
         res.send('Usuario registrado con éxito. <a href="/login">Ir al Login</a>');
     } catch (err) {
-        console.error('ERROR EN REGISTRO:', err);
-        res.status(500).send(`<h1>Error al registrar</h1><p>${err.message}</p><p>Detalle: ${err.detail || 'Sin detalles'}</p><a href="/register">Volver</a>`);
+        res.status(500).send('Error interno: ' + err.message);
     }
 });
 
@@ -129,10 +127,13 @@ app.get('/feed', requireLogin, async (req, res) => {
 app.get('/perfil/:email', requireLogin, async (req, res) => {
     try {
         const { email } = req.params;
-        const usuario = (await pool.query('SELECT * FROM usuarios WHERE email = $1', [email])).rows[0];
-        const fotos = (await pool.query('SELECT * FROM fotos WHERE usuario_email = $1 AND tipo = $2', [email, 'galeria'])).rows;
+        const usuarioResult = await pool.query('SELECT * FROM usuarios WHERE email = $1', [email]);
+        const fotosResult = await pool.query('SELECT * FROM fotos WHERE usuario_email = $1 AND tipo = $2', [email, 'galeria']);
         
-        let galeriaHTML = fotos.map(f => `<img src="${f.url_foto}" style="width:150px; margin:5px; border-radius:10px;">`).join('');
+        if (usuarioResult.rows.length === 0) return res.send('Usuario no encontrado');
+        
+        const usuario = usuarioResult.rows[0];
+        let galeriaHTML = fotosResult.rows.map(f => `<img src="${f.url_foto}" style="width:150px; margin:5px; border-radius:10px;">`).join('');
 
         res.send(`<html><head><link rel="stylesheet" href="/style.css"></head><body>
             <div class="glass-card">
