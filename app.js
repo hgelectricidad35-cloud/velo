@@ -122,6 +122,7 @@ app.post('/pagar', requireLogin, async (req, res) => {
                     quantity: 1,
                     unit_price: 100 // Precio de ejemplo
                 }],
+                external_reference: req.session.user.email, // ESTO VINCULA EL PAGO CON EL USUARIO
                 back_urls: {
                     success: 'https://veloapp.store/feed',
                     failure: 'https://veloapp.store/perfil/' + req.session.user.email,
@@ -188,14 +189,12 @@ app.get('/perfil/:email', requireLogin, async (req, res) => {
 
         let formHTML = '';
         if (emailSesion === emailPerfil) {
-            // El usuario está viendo su perfil
             formHTML = `<div style="border:2px solid green; padding:10px;"><h3>Subir nueva foto</h3>
                 <form action="/agregar-foto" method="POST" enctype="multipart/form-data">
                     <input type="file" name="foto" accept="image/*" required><br>
                     <button type="submit">Subir</button>
                 </form></div>`;
             
-            // Si es free, mostramos el botón de pagar
             if (usuario.membresia === 'free') {
                 formHTML += `<br><form action="/pagar" method="POST">
                     <button type="submit" style="background:#d4af37; padding:10px; border:none; border-radius:5px; cursor:pointer;">Mejorar a Premium</button>
