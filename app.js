@@ -59,7 +59,6 @@ app.get('/login', (req, res) => {
                 <button type="submit">Entrar</button>
             </form>
             <br><a href="/register">¿No tenés cuenta? Registrate</a>
-            <br><a href="/recuperar" style="font-size:0.8em; color:#ccc;">¿Olvidaste tu contraseña?</a>
         </div></body></html>`);
 });
 
@@ -97,17 +96,11 @@ app.get('/register', (req, res) => {
 app.post('/register', upload.single('foto'), async (req, res) => {
     try {
         if (!req.file) throw new Error('No se subió ninguna imagen.');
-        
         const { nombre, email, password } = req.body;
         const foto_url = req.file.path;
-
-        await pool.query('INSERT INTO usuarios (nombre, email, password, membresia) VALUES ($1, $2, $3, $4)', 
-                         [nombre, email, password, 'free']);
-        
-        await pool.query('INSERT INTO fotos (usuario_email, url_foto, tipo) VALUES ($1, $2, $3)', 
-                         [email, foto_url, 'galeria']);
-        
-        res.send('Usuario registrado con éxito. <a href="/login">Ir al Login</a>');
+        await pool.query('INSERT INTO usuarios (nombre, email, password, membresia) VALUES ($1, $2, $3, $4)', [nombre, email, password, 'free']);
+        await pool.query('INSERT INTO fotos (usuario_email, url_foto, tipo) VALUES ($1, $2, $3)', [email, foto_url, 'galeria']);
+        res.send('Usuario registrado. <a href="/login">Ir al Login</a>');
     } catch (err) {
         res.status(500).send('Error interno: ' + err.message);
     }
@@ -118,16 +111,12 @@ app.post('/agregar-foto', requireLogin, upload.single('foto'), async (req, res) 
         if (!req.file) return res.send('No seleccionaste foto.');
         const email = req.session.user.email;
         const membresia = req.session.user.membresia;
-        
         const countResult = await pool.query('SELECT COUNT(*) FROM fotos WHERE usuario_email = $1', [email]);
         const cantidad = parseInt(countResult.rows[0].count);
-
         if (membresia === 'free' && cantidad >= 3) {
             return res.send('Límite alcanzado (máx 3 fotos). <a href="/perfil/' + email + '">Volver</a>');
         }
-
-        await pool.query('INSERT INTO fotos (usuario_email, url_foto, tipo) VALUES ($1, $2, $3)', 
-                         [email, req.file.path, 'galeria']);
+        await pool.query('INSERT INTO fotos (usuario_email, url_foto, tipo) VALUES ($1, $2, $3)', [email, req.file.path, 'galeria']);
         res.redirect('/perfil/' + email);
     } catch (err) {
         res.status(500).send('Error: ' + err.message);
@@ -143,11 +132,9 @@ app.get('/feed', requireLogin, async (req, res) => {
                 <p style="margin:0; font-weight:bold;">${u.nombre}</p>
                 <a href="/perfil/${u.email}" style="color:#d4af37; text-decoration:none;">Ver perfil</a>
             </div>`).join('');
-
         res.send(`<html><head><link rel="stylesheet" href="/style.css"></head><body>
             <div class="glass-card" style="width: 90%;">
                 <h1>Velo Feed - Bienvenido ${req.session.user.nombre}</h1>
-                <p>Plan: <b>${req.session.user.membresia}</b></p>
                 <div style="display:flex; gap:20px; flex-wrap:wrap; justify-content:center;">${cards}</div>
                 <br><a href="/logout" style="color:white;">Cerrar sesión</a>
             </div></body></html>`);
@@ -156,6 +143,7 @@ app.get('/feed', requireLogin, async (req, res) => {
     }
 });
 
+// RUTA DEBUGGEADA PARA VER POR QUÉ NO SALE EL BOTÓN
 app.get('/perfil/:email', requireLogin, async (req, res) => {
     try {
         const { email } = req.params;
@@ -167,16 +155,22 @@ app.get('/perfil/:email', requireLogin, async (req, res) => {
         const usuario = usuarioResult.rows[0];
         let galeriaHTML = fotosResult.rows.map(f => `<img src="${f.url_foto}" style="width:150px; margin:5px; border-radius:10px;">`).join('');
 
-        const emailSesion = req.session.user.email.toLowerCase().trim();
+        const emailSesion = req.session.user.email ? req.session.user.email.toLowerCase().trim() : 'VACIO';
         const emailPerfil = email.toLowerCase().trim();
 
         let formHTML = '';
         if (emailSesion === emailPerfil) {
-            formHTML = `<h3>Subir nueva foto</h3>
+            formHTML = `<div style="border:2px solid green; padding:10px;"><h3>Subir nueva foto</h3>
                 <form action="/agregar-foto" method="POST" enctype="multipart/form-data">
                     <input type="file" name="foto" accept="image/*" required><br>
                     <button type="submit">Subir</button>
-                </form>`;
+                </form></div>`;
+        } else {
+            formHTML = `<div style="background:yellow; color:black; padding:10px;">
+                <p><b>DEBUG:</b> El botón no sale porque los emails no coinciden.</p>
+                <p>Sesión: ${emailSesion}</p>
+                <p>URL: ${emailPerfil}</p>
+            </div>`;
         }
 
         res.send(`<html><head><link rel="stylesheet" href="/style.css"></head><body>
