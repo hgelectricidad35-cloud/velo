@@ -112,17 +112,18 @@ app.post('/register', upload.single('foto'), async (req, res) => {
     }
 });
 
+// RUTA DE PAGO CONFIGURADA A 10 USD
 app.post('/pagar', requireLogin, async (req, res) => {
     try {
         const preference = new Preference(client);
         const result = await preference.create({
             body: {
                 items: [{
-                    title: 'Membresía Premium Velo',
+                    title: 'Membresía Premium Velo (1 mes)',
                     quantity: 1,
-                    unit_price: 100 
+                    unit_price: 10 // Precio configurado a 10 USD
                 }],
-                external_reference: req.session.user.email,
+                external_reference: req.session.user.email, // Vinculamos el email para saber quién paga
                 back_urls: {
                     success: 'https://veloapp.store/feed',
                     failure: 'https://veloapp.store/perfil/' + req.session.user.email,
@@ -136,17 +137,17 @@ app.post('/pagar', requireLogin, async (req, res) => {
     }
 });
 
-// Ruta WEBHOOK: Mercado Pago nos avisa automáticamente
+// AUTOMATIZACIÓN: Webhook recibe el OK de Mercado Pago y activa al usuario
 app.post('/webhook', express.json(), async (req, res) => {
     try {
         const { data, type } = req.body;
-        // Si es un pago, consultamos el estado
         if (type === 'payment' && data && data.id) {
             const paymentData = await payment.get({ id: data.id });
             
-            // Si el pago está aprobado, actualizamos al usuario
+            // Si Mercado Pago confirma el pago como "approved"
             if (paymentData.status === 'approved') {
-                const email = paymentData.external_reference;
+                const email = paymentData.external_reference; // Recuperamos el email que guardamos antes
+                // Actualizamos la base de datos automáticamente
                 await pool.query("UPDATE usuarios SET membresia = 'premium' WHERE email = $1", [email]);
             }
         }
@@ -218,8 +219,10 @@ app.get('/perfil/:email', requireLogin, async (req, res) => {
             
             if (usuario.membresia === 'free') {
                 formHTML += `<br><form action="/pagar" method="POST">
-                    <button type="submit" style="background:#d4af37; padding:10px; border:none; border-radius:5px; cursor:pointer;">Mejorar a Premium</button>
+                    <button type="submit" style="background:#d4af37; padding:10px; border:none; border-radius:5px; cursor:pointer;">Mejorar a Premium ($10 USD)</button>
                 </form>`;
+            } else {
+                formHTML += `<br><p style="color:gold;"><b>¡Eres usuario Premium!</b></p>`;
             }
         } else {
             formHTML = `<div style="background:yellow; color:black; padding:10px;">
