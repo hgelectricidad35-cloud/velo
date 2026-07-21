@@ -5,7 +5,12 @@ const session = require('express-session');
 const multer = require('multer');
 const { CloudinaryStorage } = require('multer-storage-cloudinary');
 const cloudinary = require('cloudinary').v2;
+const { MercadoPagoConfig, Preference } = require('mercadopago');
+
 const app = express();
+
+// Configuración Mercado Pago
+const client = new MercadoPagoConfig({ accessToken: process.env.MERCADO_PAGO_ACCESS_TOKEN });
 
 cloudinary.config({
     cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -106,6 +111,30 @@ app.post('/register', upload.single('foto'), async (req, res) => {
     }
 });
 
+// Ruta para procesar el pago
+app.post('/pagar', requireLogin, async (req, res) => {
+    try {
+        const preference = new Preference(client);
+        const result = await preference.create({
+            body: {
+                items: [{
+                    title: 'Membresía Premium Velo',
+                    quantity: 1,
+                    unit_price: 100 // Precio de ejemplo
+                }],
+                back_urls: {
+                    success: 'https://veloapp.store/feed',
+                    failure: 'https://veloapp.store/perfil/' + req.session.user.email,
+                    pending: 'https://veloapp.store/perfil/' + req.session.user.email
+                }
+            }
+        });
+        res.redirect(result.init_point);
+    } catch (err) {
+        res.send('Error en el pago: ' + err.message);
+    }
+});
+
 app.post('/agregar-foto', requireLogin, upload.single('foto'), async (req, res) => {
     try {
         if (!req.file) return res.send('No seleccionaste foto.');
@@ -143,7 +172,6 @@ app.get('/feed', requireLogin, async (req, res) => {
     }
 });
 
-// RUTA DEBUGGEADA PARA VER POR QUÉ NO SALE EL BOTÓN
 app.get('/perfil/:email', requireLogin, async (req, res) => {
     try {
         const { email } = req.params;
@@ -160,11 +188,19 @@ app.get('/perfil/:email', requireLogin, async (req, res) => {
 
         let formHTML = '';
         if (emailSesion === emailPerfil) {
+            // El usuario está viendo su perfil
             formHTML = `<div style="border:2px solid green; padding:10px;"><h3>Subir nueva foto</h3>
                 <form action="/agregar-foto" method="POST" enctype="multipart/form-data">
                     <input type="file" name="foto" accept="image/*" required><br>
                     <button type="submit">Subir</button>
                 </form></div>`;
+            
+            // Si es free, mostramos el botón de pagar
+            if (usuario.membresia === 'free') {
+                formHTML += `<br><form action="/pagar" method="POST">
+                    <button type="submit" style="background:#d4af37; padding:10px; border:none; border-radius:5px; cursor:pointer;">Mejorar a Premium</button>
+                </form>`;
+            }
         } else {
             formHTML = `<div style="background:yellow; color:black; padding:10px;">
                 <p><b>DEBUG:</b> El botón no sale porque los emails no coinciden.</p>
