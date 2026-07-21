@@ -41,23 +41,34 @@ const requireLogin = (req, res, next) => {
 
 app.get('/', (req, res) => res.redirect('/login'));
 
+// RUTA LOGIN MODIFICADA CON VISUALIZACIÓN DE CLAVE Y RECUPERACIÓN
 app.get('/login', (req, res) => {
-    res.send(`<html><head><link rel="stylesheet" href="/style.css"></head>
+    res.send(`<html><head><link rel="stylesheet" href="/style.css">
+        <script>
+            function togglePassword() {
+                var x = document.getElementById("pass");
+                if (x.type === "password") { x.type = "text"; } else { x.type = "password"; }
+            }
+        </script>
+        </head>
         <body><div class="glass-card">
             <h1>Login Velo</h1>
             <form action="/login" method="POST">
                 <input type="email" name="email" placeholder="Email" required><br>
-                <input type="password" name="password" placeholder="Clave" required><br>
+                <input type="password" id="pass" name="password" placeholder="Clave" required>
+                <button type="button" onclick="togglePassword()" style="cursor:pointer;">👁️</button><br>
                 <button type="submit">Entrar</button>
             </form>
             <br><a href="/register">¿No tenés cuenta? Registrate</a>
+            <br><a href="/recuperar" style="font-size:0.8em; color:#ccc;">¿Olvidaste tu contraseña?</a>
         </div></body></html>`);
 });
 
 app.post('/login', async (req, res) => {
     try {
         const { email, password } = req.body;
-        const result = await pool.query('SELECT * FROM usuarios WHERE email = $1 AND password = $2', [email, password]);
+        const result = await pool.query('SELECT nombre, email, membresia FROM usuarios WHERE email = $1 AND password = $2', [email, password]);
+        
         if (result.rows.length > 0) {
             req.session.user = result.rows[0];
             res.redirect('/feed');
@@ -116,6 +127,7 @@ app.get('/feed', requireLogin, async (req, res) => {
         res.send(`<html><head><link rel="stylesheet" href="/style.css"></head><body>
             <div class="glass-card" style="width: 90%;">
                 <h1>Velo Feed - Bienvenido ${req.session.user.nombre}</h1>
+                <p>Plan actual: <b>${req.session.user.membresia}</b></p>
                 <div style="display:flex; gap:20px; flex-wrap:wrap; justify-content:center;">${cards}</div>
                 <br><a href="/logout" style="color:white;">Cerrar sesión</a>
             </div></body></html>`);
