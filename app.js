@@ -5,12 +5,13 @@ const session = require('express-session');
 const multer = require('multer');
 const { CloudinaryStorage } = require('multer-storage-cloudinary');
 const cloudinary = require('cloudinary').v2;
-const { MercadoPagoConfig, Preference } = require('mercadopago');
+const { MercadoPagoConfig, Preference, Payment } = require('mercadopago');
 
 const app = express();
 
 // Configuración Mercado Pago
 const client = new MercadoPagoConfig({ accessToken: process.env.MERCADO_PAGO_ACCESS_TOKEN });
+const payment = new Payment(client); // Para consultar el estado del pago
 
 cloudinary.config({
     cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -111,7 +112,6 @@ app.post('/register', upload.single('foto'), async (req, res) => {
     }
 });
 
-// Ruta para procesar el pago
 app.post('/pagar', requireLogin, async (req, res) => {
     try {
         const preference = new Preference(client);
@@ -120,9 +120,9 @@ app.post('/pagar', requireLogin, async (req, res) => {
                 items: [{
                     title: 'Membresía Premium Velo',
                     quantity: 1,
-                    unit_price: 100 // Precio de ejemplo
+                    unit_price: 100 
                 }],
-                external_reference: req.session.user.email, // ESTO VINCULA EL PAGO CON EL USUARIO
+                external_reference: req.session.user.email,
                 back_urls: {
                     success: 'https://veloapp.store/feed',
                     failure: 'https://veloapp.store/perfil/' + req.session.user.email,
@@ -133,6 +133,27 @@ app.post('/pagar', requireLogin, async (req, res) => {
         res.redirect(result.init_point);
     } catch (err) {
         res.send('Error en el pago: ' + err.message);
+    }
+});
+
+// Ruta WEBHOOK: Mercado Pago nos avisa automáticamente
+app.post('/webhook', express.json(), async (req, res) => {
+    try {
+        const { data, type } = req.body;
+        // Si es un pago, consultamos el estado
+        if (type === 'payment' && data && data.id) {
+            const paymentData = await payment.get({ id: data.id });
+            
+            // Si el pago está aprobado, actualizamos al usuario
+            if (paymentData.status === 'approved') {
+                const email = paymentData.external_reference;
+                await pool.query("UPDATE usuarios SET membresia = 'premium' WHERE email = $1", [email]);
+            }
+        }
+        res.status(200).send('OK');
+    } catch (err) {
+        console.error('Error en webhook:', err);
+        res.status(500).send('Error');
     }
 });
 
