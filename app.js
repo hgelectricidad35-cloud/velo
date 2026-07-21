@@ -84,8 +84,8 @@ app.get('/register', (req, res) => {
         </div></body></html>`);
 });
 
-// RUTA REGISTRO MODIFICADA PARA VER EL ERROR REAL
 app.post('/register', upload.single('foto'), async (req, res) => {
+    console.log("Iniciando proceso de registro...");
     try {
         if (!req.file) throw new Error('No se subió ninguna imagen.');
         
@@ -100,9 +100,8 @@ app.post('/register', upload.single('foto'), async (req, res) => {
         
         res.send('Usuario registrado con éxito. <a href="/login">Ir al Login</a>');
     } catch (err) {
-        // AQUÍ ESTÁ EL CAMBIO: ahora verás el error detallado en la pantalla
-        console.error('Error completo:', err);
-        res.send(`<h1>Error al registrar</h1><p>${err.message}</p><p>Detalle: ${err.detail || 'Sin detalles adicionales'}</p><a href="/register">Volver</a>`);
+        console.error('ERROR EN REGISTRO:', err);
+        res.status(500).send(`<h1>Error al registrar</h1><p>${err.message}</p><p>Detalle: ${err.detail || 'Sin detalles'}</p><a href="/register">Volver</a>`);
     }
 });
 
