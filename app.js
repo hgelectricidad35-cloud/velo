@@ -1,7 +1,25 @@
+require('dotenv').config(); // <<--- 1. Cargamos las variables de entorno al inicio
 const express = require('express');
 const { Pool } = require('pg');
 const session = require('express-session');
+const multer = require('multer'); // <<--- 2. Importamos multer
+const { CloudinaryStorage } = require('multer-storage-cloudinary'); // <<--- 2. Importamos storage de cloudinary
+const cloudinary = require('cloudinary').v2; // <<--- 2. Importamos cloudinary
 const app = express();
+
+// --- Configuración de Cloudinary ---
+cloudinary.config({
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+    api_key: process.env.CLOUDINARY_API_KEY,
+    api_secret: process.env.CLOUDINARY_API_SECRET
+});
+
+const storage = new CloudinaryStorage({
+    cloudinary: cloudinary,
+    params: { folder: 'perfiles_velo' }
+});
+
+const upload = multer({ storage: storage }); // <<--- Definimos el middleware de subida
 
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
@@ -52,23 +70,25 @@ app.post('/login', async (req, res) => {
     }
 });
 
+// --- RUTA DE REGISTRO ACTUALIZADA ---
 app.get('/register', (req, res) => {
     res.send(`<html><head><link rel="stylesheet" href="/style.css"></head>
         <body><div class="glass-card">
             <h1>Registro Velo</h1>
-            <form action="/register" method="POST">
+            <form action="/register" method="POST" enctype="multipart/form-data"> 
                 <input type="text" name="nombre" placeholder="Nombre" required><br>
                 <input type="email" name="email" placeholder="Email" required><br>
                 <input type="password" name="password" placeholder="Clave" required><br>
-                <input type="url" name="foto_url" placeholder="URL de tu foto de rostro" required><br>
-                <p style="color:white;">* Obligatorio: Pega el link de tu foto.</p>
+                <p style="color:white;">Foto de perfil:</p>
+                <input type="file" name="foto" accept="image/*" required><br>
                 <button type="submit">Registrarse</button>
             </form>
         </div></body></html>`);
 });
 
-app.post('/register', async (req, res) => {
-    const { nombre, email, password, foto_url } = req.body;
+app.post('/register', upload.single('foto'), async (req, res) => { // <<--- Agregamos el middleware 'upload.single'
+    const { nombre, email, password } = req.body;
+    const foto_url = req.file.path; // La URL que nos devuelve Cloudinary automáticamente
     try {
         await pool.query('INSERT INTO usuarios (nombre, email, password, membresia) VALUES ($1, $2, $3, $4)', 
                          [nombre, email, password, 'free']);
