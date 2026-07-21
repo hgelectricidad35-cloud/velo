@@ -41,7 +41,6 @@ const requireLogin = (req, res, next) => {
 
 app.get('/', (req, res) => res.redirect('/login'));
 
-// RUTA LOGIN MODIFICADA CON VISUALIZACIÓN DE CLAVE Y RECUPERACIÓN
 app.get('/login', (req, res) => {
     res.send(`<html><head><link rel="stylesheet" href="/style.css">
         <script>
@@ -114,6 +113,28 @@ app.post('/register', upload.single('foto'), async (req, res) => {
     }
 });
 
+// NUEVA RUTA PARA AGREGAR FOTOS CON LÍMITE
+app.post('/agregar-foto', requireLogin, upload.single('foto'), async (req, res) => {
+    try {
+        if (!req.file) return res.send('No seleccionaste foto.');
+        const email = req.session.user.email;
+        const membresia = req.session.user.membresia;
+        
+        const countResult = await pool.query('SELECT COUNT(*) FROM fotos WHERE usuario_email = $1', [email]);
+        const cantidad = parseInt(countResult.rows[0].count);
+
+        if (membresia === 'free' && cantidad >= 3) {
+            return res.send('Límite alcanzado (máx 3 fotos). <a href="/perfil/' + email + '">Volver</a>');
+        }
+
+        await pool.query('INSERT INTO fotos (usuario_email, url_foto, tipo) VALUES ($1, $2, $3)', 
+                         [email, req.file.path, 'galeria']);
+        res.redirect('/perfil/' + email);
+    } catch (err) {
+        res.status(500).send('Error: ' + err.message);
+    }
+});
+
 app.get('/feed', requireLogin, async (req, res) => {
     try {
         const result = await pool.query('SELECT u.nombre, u.email, f.url_foto FROM usuarios u LEFT JOIN fotos f ON u.email = f.usuario_email WHERE f.tipo = $1', ['galeria']);
@@ -127,7 +148,7 @@ app.get('/feed', requireLogin, async (req, res) => {
         res.send(`<html><head><link rel="stylesheet" href="/style.css"></head><body>
             <div class="glass-card" style="width: 90%;">
                 <h1>Velo Feed - Bienvenido ${req.session.user.nombre}</h1>
-                <p>Plan actual: <b>${req.session.user.membresia}</b></p>
+                <p>Plan: <b>${req.session.user.membresia}</b></p>
                 <div style="display:flex; gap:20px; flex-wrap:wrap; justify-content:center;">${cards}</div>
                 <br><a href="/logout" style="color:white;">Cerrar sesión</a>
             </div></body></html>`);
@@ -147,10 +168,21 @@ app.get('/perfil/:email', requireLogin, async (req, res) => {
         const usuario = usuarioResult.rows[0];
         let galeriaHTML = fotosResult.rows.map(f => `<img src="${f.url_foto}" style="width:150px; margin:5px; border-radius:10px;">`).join('');
 
+        // Formulario de subida solo si es el propio usuario
+        let formHTML = '';
+        if (req.session.user.email === email) {
+            formHTML = `<h3>Subir nueva foto</h3>
+                <form action="/agregar-foto" method="POST" enctype="multipart/form-data">
+                    <input type="file" name="foto" accept="image/*" required><br>
+                    <button type="submit">Subir</button>
+                </form>`;
+        }
+
         res.send(`<html><head><link rel="stylesheet" href="/style.css"></head><body>
             <div class="glass-card">
                 <h1>Perfil de ${usuario.nombre}</h1>
                 <h3>Galería</h3>${galeriaHTML}
+                <hr>${formHTML}
                 <br><a href="/feed" style="color:white;">Volver al Feed</a>
             </div></body></html>`);
     } catch (err) {
