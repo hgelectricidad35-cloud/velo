@@ -7,11 +7,17 @@ const { CloudinaryStorage } = require('multer-storage-cloudinary');
 const cloudinary = require('cloudinary').v2;
 const { MercadoPagoConfig, Preference, Payment } = require('mercadopago');
 
+// --- NUEVOS IMPORTS PARA SOCKET.IO ---
+const http = require('http');
+const { Server } = require('socket.io');
+
 const app = express();
+const server = http.createServer(app); // Creamos servidor HTTP
+const io = new Server(server); // Inicializamos Socket.io con el servidor
 
 // Configuración Mercado Pago
 const client = new MercadoPagoConfig({ accessToken: process.env.MERCADO_PAGO_ACCESS_TOKEN });
-const payment = new Payment(client); // Para consultar el estado del pago
+const payment = new Payment(client);
 
 cloudinary.config({
     cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -45,6 +51,14 @@ const requireLogin = (req, res, next) => {
     next();
 };
 
+// --- LOGICA DE CHAT EN TIEMPO REAL ---
+io.on('connection', (socket) => {
+    console.log('Usuario conectado al chat');
+    socket.on('chat message', (msg) => {
+        io.emit('chat message', msg); // Envía el mensaje a todos
+    });
+});
+
 app.get('/', (req, res) => res.redirect('/login'));
 
 app.get('/login', (req, res) => {
@@ -72,7 +86,6 @@ app.post('/login', async (req, res) => {
     try {
         const { email, password } = req.body;
         const result = await pool.query('SELECT nombre, email, membresia FROM usuarios WHERE email = $1 AND password = $2', [email, password]);
-        
         if (result.rows.length > 0) {
             req.session.user = result.rows[0];
             res.redirect('/feed');
@@ -112,18 +125,44 @@ app.post('/register', upload.single('foto'), async (req, res) => {
     }
 });
 
-// RUTA DE PAGO CONFIGURADA A 10 USD
+// RUTA DE CHAT (Nueva)
+app.get('/chat', requireLogin, (req, res) => {
+    res.send(`<html><head><link rel="stylesheet" href="/style.css">
+        <script src="/socket.io/socket.io.js"></script>
+        </head><body>
+        <div class="glass-card" style="width: 80%; height: 80vh; display: flex; flex-direction: column;">
+            <h1>Chat Velo</h1>
+            <ul id="messages" style="flex-grow: 1; overflow-y: auto; color: white; list-style: none;"></ul>
+            <form id="form" style="display: flex;">
+                <input id="input" autocomplete="off" placeholder="Escribe algo..." style="flex-grow: 1;">
+                <button type="submit">Enviar</button>
+            </form>
+        </div>
+        <script>
+            const socket = io();
+            const form = document.getElementById('form');
+            const input = document.getElementById('input');
+            const messages = document.getElementById('messages');
+            form.addEventListener('submit', (e) => {
+                e.preventDefault();
+                if (input.value) { socket.emit('chat message', input.value); input.value = ''; }
+            });
+            socket.on('chat message', (msg) => {
+                const item = document.createElement('li');
+                item.textContent = msg;
+                messages.appendChild(item);
+            });
+        </script>
+        </body></html>`);
+});
+
 app.post('/pagar', requireLogin, async (req, res) => {
     try {
         const preference = new Preference(client);
         const result = await preference.create({
             body: {
-                items: [{
-                    title: 'Membresía Premium Velo (1 mes)',
-                    quantity: 1,
-                    unit_price: 10 // Precio configurado a 10 USD
-                }],
-                external_reference: req.session.user.email, // Vinculamos el email para saber quién paga
+                items: [{ title: 'Membresía Premium Velo (1 mes)', quantity: 1, unit_price: 10 }],
+                external_reference: req.session.user.email,
                 back_urls: {
                     success: 'https://veloapp.store/feed',
                     failure: 'https://veloapp.store/perfil/' + req.session.user.email,
@@ -137,17 +176,13 @@ app.post('/pagar', requireLogin, async (req, res) => {
     }
 });
 
-// AUTOMATIZACIÓN: Webhook recibe el OK de Mercado Pago y activa al usuario
 app.post('/webhook', express.json(), async (req, res) => {
     try {
         const { data, type } = req.body;
         if (type === 'payment' && data && data.id) {
             const paymentData = await payment.get({ id: data.id });
-            
-            // Si Mercado Pago confirma el pago como "approved"
             if (paymentData.status === 'approved') {
-                const email = paymentData.external_reference; // Recuperamos el email que guardamos antes
-                // Actualizamos la base de datos automáticamente
+                const email = paymentData.external_reference;
                 await pool.query("UPDATE usuarios SET membresia = 'premium' WHERE email = $1", [email]);
             }
         }
@@ -188,6 +223,7 @@ app.get('/feed', requireLogin, async (req, res) => {
             <div class="glass-card" style="width: 90%;">
                 <h1>Velo Feed - Bienvenido ${req.session.user.nombre}</h1>
                 <div style="display:flex; gap:20px; flex-wrap:wrap; justify-content:center;">${cards}</div>
+                <br><a href="/chat" style="color:white; display:block; margin:20px;">Ir al Chat</a>
                 <br><a href="/logout" style="color:white;">Cerrar sesión</a>
             </div></body></html>`);
     } catch (err) {
@@ -224,12 +260,6 @@ app.get('/perfil/:email', requireLogin, async (req, res) => {
             } else {
                 formHTML += `<br><p style="color:gold;"><b>¡Eres usuario Premium!</b></p>`;
             }
-        } else {
-            formHTML = `<div style="background:yellow; color:black; padding:10px;">
-                <p><b>DEBUG:</b> El botón no sale porque los emails no coinciden.</p>
-                <p>Sesión: ${emailSesion}</p>
-                <p>URL: ${emailPerfil}</p>
-            </div>`;
         }
 
         res.send(`<html><head><link rel="stylesheet" href="/style.css"></head><body>
@@ -249,4 +279,5 @@ app.get('/logout', (req, res) => {
     res.redirect('/login');
 });
 
-app.listen(process.env.PORT || 3000, () => console.log('Velo Producción activo'));
+// ¡IMPORTANTE! Usamos server.listen en lugar de app.listen
+server.listen(process.env.PORT || 3000, () => console.log('Velo Producción activo con Chat'));
