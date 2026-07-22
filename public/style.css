@@ -1,86 +1,73 @@
+/* --- Fondo de circuitos oscuros --- */
 body {
     margin: 0;
     height: 100vh;
     display: flex;
     justify-content: center;
     align-items: center;
-    /* Mantenemos tu imagen, pero le agregamos una capa oscura encima */
-    background: linear-gradient(rgba(0, 0, 0, 0.6), rgba(0, 0, 0, 0.6)), 
-                url('https://images.unsplash.com/photo-1514362545857-3bc16c4c7d1b?q=80&w=2070') no-repeat center center fixed;
-    background-size: cover;
+    /* Fondo azul-oscuro metálico */
+    background: #0f172a; 
     font-family: 'Segoe UI', sans-serif;
-    color: #ffffff;
+    color: #e2e8f0;
 }
 
+/* --- Card de vidrio moderno --- */
 .glass-card {
-    /* Ajuste de transparencia y desenfoque */
-    background: rgba(255, 255, 255, 0.08); 
-    backdrop-filter: blur(25px);           
-    -webkit-backdrop-filter: blur(25px);
-    /* Borde más definido para que se note el efecto cristal */
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    border-radius: 30px;
-    padding: 50px;
-    width: 380px;
+    background: rgba(30, 41, 59, 0.7); /* Azul oscuro translúcido */
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 20px;
+    padding: 40px;
+    width: 350px;
     text-align: center;
-    /* Sombra más sutil pero elegante */
-    box-shadow: 0 15px 35px rgba(0,0,0,0.5);
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3);
 }
 
+/* --- Títulos --- */
 h1 {
-    font-size: 2.2rem;
+    font-size: 1.5rem;
     margin-bottom: 25px;
-    color: #f5e1a4;
-    text-shadow: 0 0 10px rgba(245, 225, 164, 0.3); /* Efecto de brillo suave */
+    color: #f8fafc;
 }
 
+/* --- Inputs estilo "píldora" con bordes fríos --- */
 input {
     width: 100%;
-    padding: 16px;
-    margin: 12px 0;
-    background: rgba(0, 0, 0, 0.3); /* Un poco más oscuro para dar profundidad */
-    border: 1px solid rgba(255, 255, 255, 0.2);
+    padding: 12px 15px;
+    margin: 10px 0;
+    background: rgba(15, 23, 42, 0.5);
+    border: 1px solid #475569;
     border-radius: 50px;
-    color: white;
-    font-size: 1rem;
+    color: #cbd5e1;
     box-sizing: border-box;
-    transition: 0.3s; /* Animación suave al clickear */
 }
 
-input:focus {
-    outline: none;
-    border-color: #f5e1a4; /* Se ilumina al escribir */
-    box-shadow: 0 0 10px rgba(245, 225, 164, 0.2);
-}
-
-button {
+/* --- Botón "Iniciar Sesión" (Azul Oscuro) --- */
+button[type="submit"] {
     width: 100%;
-    padding: 16px;
-    background: linear-gradient(135deg, #e6d29d, #bf953f);
+    padding: 12px;
+    background: #1e1b4b; /* Azul medianoche */
     border: none;
     border-radius: 50px;
-    color: #1a1a1a;
+    color: white;
     font-weight: bold;
-    font-size: 1.1rem;
     cursor: pointer;
-    margin-top: 20px;
-    transition: transform 0.2s; /* Un pequeño efecto de rebote al clickear */
+    margin-top: 15px;
 }
 
-button:hover {
-    transform: scale(1.02); /* Se agranda un poquito al pasar el mouse */
-    filter: brightness(1.2);
+/* --- Ajuste para el botón ocultar contraseña (el del ojito) --- */
+button[type="button"] {
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    margin: 5px;
 }
 
 a {
-    display: block;
-    margin-top: 25px;
-    color: rgba(255, 255, 255, 0.6);
-    text-decoration: none; /* Mejor sin subrayado para este estilo */
+    color: #94a3b8;
+    text-decoration: none;
     font-size: 0.9rem;
-    transition: 0.3s;
-}
-
-a:hover {
-    color: #f5e1a4;
+    display: block;
+    margin-top: 15px;
 }
