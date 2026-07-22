@@ -54,8 +54,8 @@ const requireLogin = (req, res, next) => {
 // --- LOGICA DE CHAT EN TIEMPO REAL ---
 io.on('connection', (socket) => {
     console.log('Usuario conectado al chat');
-    socket.on('chat message', (msg) => {
-        io.emit('chat message', msg); // Envía el mensaje a todos
+    socket.on('chat message', (data) => {
+        io.emit('chat message', data); // Envía el objeto (msg + user) a todos
     });
 });
 
@@ -125,32 +125,48 @@ app.post('/register', upload.single('foto'), async (req, res) => {
     }
 });
 
-// RUTA DE CHAT (Nueva)
+// --- RUTA DE CHAT MEJORADA ---
 app.get('/chat', requireLogin, (req, res) => {
+    const username = req.session.user.nombre;
     res.send(`<html><head><link rel="stylesheet" href="/style.css">
         <script src="/socket.io/socket.io.js"></script>
+        <style>
+            .chat-container { width: 90%; max-width: 600px; height: 70vh; margin: 20px auto; display: flex; flex-direction: column; background: rgba(255, 255, 255, 0.05); backdrop-filter: blur(15px); border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 20px; padding: 20px; color: white; }
+            #messages { flex-grow: 1; overflow-y: auto; list-style: none; padding: 0; }
+            #messages li { background: rgba(0, 0, 0, 0.3); padding: 10px; margin-bottom: 10px; border-radius: 10px; border-left: 3px solid #d4af37; }
+            #form { display: flex; gap: 10px; margin-top: 10px; }
+            input { flex-grow: 1; background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 10px; padding: 10px; color: white; }
+            button { background: #d4af37; border: none; padding: 10px 20px; border-radius: 10px; cursor: pointer; font-weight: bold; }
+        </style>
         </head><body>
-        <div class="glass-card" style="width: 80%; height: 80vh; display: flex; flex-direction: column;">
-            <h1>Chat Velo</h1>
-            <ul id="messages" style="flex-grow: 1; overflow-y: auto; color: white; list-style: none;"></ul>
-            <form id="form" style="display: flex;">
-                <input id="input" autocomplete="off" placeholder="Escribe algo..." style="flex-grow: 1;">
+        <div class="chat-container">
+            <h1 style="text-align:center;">Velo Chat</h1>
+            <ul id="messages"></ul>
+            <form id="form">
+                <input id="input" autocomplete="off" placeholder="Escribe un mensaje..." required>
                 <button type="submit">Enviar</button>
             </form>
+            <br><a href="/feed" style="color:white; text-decoration:none; text-align:center;">⬅ Volver al Feed</a>
         </div>
         <script>
             const socket = io();
             const form = document.getElementById('form');
             const input = document.getElementById('input');
             const messages = document.getElementById('messages');
+            const username = "${username}";
+
             form.addEventListener('submit', (e) => {
                 e.preventDefault();
-                if (input.value) { socket.emit('chat message', input.value); input.value = ''; }
+                if (input.value) { 
+                    socket.emit('chat message', { msg: input.value, user: username }); 
+                    input.value = ''; 
+                }
             });
-            socket.on('chat message', (msg) => {
+            socket.on('chat message', (data) => {
                 const item = document.createElement('li');
-                item.textContent = msg;
+                item.innerHTML = "<strong>" + data.user + ":</strong> " + data.msg;
                 messages.appendChild(item);
+                messages.scrollTop = messages.scrollHeight;
             });
         </script>
         </body></html>`);
@@ -279,5 +295,4 @@ app.get('/logout', (req, res) => {
     res.redirect('/login');
 });
 
-// ¡IMPORTANTE! Usamos server.listen en lugar de app.listen
 server.listen(process.env.PORT || 3000, () => console.log('Velo Producción activo con Chat'));
