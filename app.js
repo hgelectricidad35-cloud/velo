@@ -7,15 +7,13 @@ const { CloudinaryStorage } = require('multer-storage-cloudinary');
 const cloudinary = require('cloudinary').v2;
 const { MercadoPagoConfig, Preference, Payment } = require('mercadopago');
 
-// --- NUEVOS IMPORTS PARA SOCKET.IO ---
 const http = require('http');
 const { Server } = require('socket.io');
 
 const app = express();
-const server = http.createServer(app); // Creamos servidor HTTP
-const io = new Server(server); // Inicializamos Socket.io con el servidor
+const server = http.createServer(app);
+const io = new Server(server);
 
-// Configuración Mercado Pago
 const client = new MercadoPagoConfig({ accessToken: process.env.MERCADO_PAGO_ACCESS_TOKEN });
 const payment = new Payment(client);
 
@@ -51,34 +49,25 @@ const requireLogin = (req, res, next) => {
     next();
 };
 
-// --- LOGICA DE CHAT EN TIEMPO REAL ---
 io.on('connection', (socket) => {
-    console.log('Usuario conectado al chat');
     socket.on('chat message', (data) => {
-        io.emit('chat message', data); // Envía el objeto (msg + user) a todos
+        io.emit('chat message', data);
     });
 });
 
 app.get('/', (req, res) => res.redirect('/login'));
 
 app.get('/login', (req, res) => {
-    res.send(`<html><head><link rel="stylesheet" href="/style.css">
-        <script>
-            function togglePassword() {
-                var x = document.getElementById("pass");
-                if (x.type === "password") { x.type = "text"; } else { x.type = "password"; }
-            }
-        </script>
-        </head>
+    res.send(`<html><head><link rel="stylesheet" href="/style.css"></head>
         <body><div class="glass-card">
             <h1>Login Velo</h1>
             <form action="/login" method="POST">
                 <input type="email" name="email" placeholder="Email" required><br>
-                <input type="password" id="pass" name="password" placeholder="Clave" required>
-                <button type="button" onclick="togglePassword()" style="cursor:pointer;">👁️</button><br>
+                <input type="password" name="password" placeholder="Clave" required><br>
                 <button type="submit">Entrar</button>
             </form>
             <br><a href="/register">¿No tenés cuenta? Registrate</a>
+            <br><br><a href="/legal" style="font-size:0.8em; color:gray;">Términos y Privacidad</a>
         </div></body></html>`);
 });
 
@@ -109,6 +98,7 @@ app.get('/register', (req, res) => {
                 <input type="file" name="foto" accept="image/*" required><br>
                 <button type="submit">Registrarse</button>
             </form>
+            <br><a href="/legal" style="font-size:0.8em; color:gray;">Al registrarte, aceptas nuestros términos legales.</a>
         </div></body></html>`);
 });
 
@@ -125,7 +115,19 @@ app.post('/register', upload.single('foto'), async (req, res) => {
     }
 });
 
-// --- RUTA DE CHAT MEJORADA ---
+// NUEVA RUTA LEGAL
+app.get('/legal', (req, res) => {
+    res.send(`<html><head><link rel="stylesheet" href="/style.css"></head><body>
+        <div class="glass-card" style="width: 80%; max-width: 700px; color: white; padding: 30px;">
+            <h1>Términos y Privacidad</h1>
+            <h3>1. Términos de Servicio</h3>
+            <p>Al registrarte en veloapp.store, declaras bajo juramento ser <b>mayor de 18 años</b>. El uso de esta plataforma implica la aceptación de estas normas. No se permite contenido ofensivo o ilegal.</p>
+            <h3>2. Privacidad y Pagos</h3>
+            <p>La seguridad de tus pagos está gestionada exclusivamente por <b>Mercado Pago</b>. Velo no almacena información bancaria. Tus fotos y datos de perfil se usan únicamente para el funcionamiento de la red social.</p>
+            <br><a href="/login" style="color:#d4af37;">Volver al Inicio</a>
+        </div></body></html>`);
+});
+
 app.get('/chat', requireLogin, (req, res) => {
     const username = req.session.user.nombre;
     res.send(`<html><head><link rel="stylesheet" href="/style.css">
@@ -154,7 +156,6 @@ app.get('/chat', requireLogin, (req, res) => {
             const input = document.getElementById('input');
             const messages = document.getElementById('messages');
             const username = "${username}";
-
             form.addEventListener('submit', (e) => {
                 e.preventDefault();
                 if (input.value) { 
@@ -252,15 +253,11 @@ app.get('/perfil/:email', requireLogin, async (req, res) => {
         const { email } = req.params;
         const usuarioResult = await pool.query('SELECT * FROM usuarios WHERE email = $1', [email]);
         const fotosResult = await pool.query('SELECT * FROM fotos WHERE usuario_email = $1 AND tipo = $2', [email, 'galeria']);
-        
         if (usuarioResult.rows.length === 0) return res.send('Usuario no encontrado');
-        
         const usuario = usuarioResult.rows[0];
         let galeriaHTML = fotosResult.rows.map(f => `<img src="${f.url_foto}" style="width:150px; margin:5px; border-radius:10px;">`).join('');
-
         const emailSesion = req.session.user.email ? req.session.user.email.toLowerCase().trim() : 'VACIO';
         const emailPerfil = email.toLowerCase().trim();
-
         let formHTML = '';
         if (emailSesion === emailPerfil) {
             formHTML = `<div style="border:2px solid green; padding:10px;"><h3>Subir nueva foto</h3>
@@ -268,7 +265,6 @@ app.get('/perfil/:email', requireLogin, async (req, res) => {
                     <input type="file" name="foto" accept="image/*" required><br>
                     <button type="submit">Subir</button>
                 </form></div>`;
-            
             if (usuario.membresia === 'free') {
                 formHTML += `<br><form action="/pagar" method="POST">
                     <button type="submit" style="background:#d4af37; padding:10px; border:none; border-radius:5px; cursor:pointer;">Mejorar a Premium ($10 USD)</button>
@@ -277,7 +273,6 @@ app.get('/perfil/:email', requireLogin, async (req, res) => {
                 formHTML += `<br><p style="color:gold;"><b>¡Eres usuario Premium!</b></p>`;
             }
         }
-
         res.send(`<html><head><link rel="stylesheet" href="/style.css"></head><body>
             <div class="glass-card">
                 <h1>Perfil de ${usuario.nombre}</h1>
@@ -295,4 +290,4 @@ app.get('/logout', (req, res) => {
     res.redirect('/login');
 });
 
-server.listen(process.env.PORT || 3000, () => console.log('Velo Producción activo con Chat'));
+server.listen(process.env.PORT || 3000, () => console.log('Velo Producción activo con Chat y Legal'));
