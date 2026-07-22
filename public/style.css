@@ -1,71 +1,81 @@
-/* --- Fondo de circuitos oscuros --- */
+/* --- Fondo con imagen tecnológica --- */
 body {
     margin: 0;
     height: 100vh;
     display: flex;
     justify-content: center;
     align-items: center;
-    /* Fondo azul-oscuro metálico */
-    background: #0f172a; 
+    /* Imagen de circuitos de alta calidad */
+    background: url('https://images.unsplash.com/photo-1550751827-4bd374c3f58b?q=80&w=2070') no-repeat center center fixed;
+    background-size: cover;
     font-family: 'Segoe UI', sans-serif;
     color: #e2e8f0;
 }
 
-/* --- Card de vidrio moderno --- */
+/* --- Card de vidrio transparente --- */
 .glass-card {
-    background: rgba(30, 41, 59, 0.7); /* Azul oscuro translúcido */
+    /* BAJAMOS LA OPACIDAD A 0.2 PARA QUE SE VEA EL FONDO */
+    background: rgba(30, 41, 59, 0.2); 
     backdrop-filter: blur(20px);
     -webkit-backdrop-filter: blur(20px);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 20px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 25px;
     padding: 40px;
     width: 350px;
     text-align: center;
-    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3);
+    /* Sombra más clara para que no opaque el vidrio */
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5);
 }
 
 /* --- Títulos --- */
 h1 {
-    font-size: 1.5rem;
+    font-size: 1.6rem;
     margin-bottom: 25px;
-    color: #f8fafc;
+    color: #ffffff;
+    text-shadow: 0 0 10px rgba(255,255,255,0.3);
 }
 
-/* --- Inputs estilo "píldora" con bordes fríos --- */
+/* --- Inputs --- */
 input {
     width: 100%;
-    padding: 12px 15px;
+    padding: 14px 15px;
     margin: 10px 0;
-    background: rgba(15, 23, 42, 0.5);
-    border: 1px solid #475569;
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.2);
     border-radius: 50px;
-    color: #cbd5e1;
+    color: #ffffff;
     box-sizing: border-box;
 }
 
-/* --- Botón "Iniciar Sesión" (Azul Oscuro) --- */
+/* --- Botón con degradado técnico --- */
 button[type="submit"] {
     width: 100%;
-    padding: 12px;
-    background: #1e1b4b; /* Azul medianoche */
+    padding: 14px;
+    background: linear-gradient(135deg, #1e293b, #3b82f6);
     border: none;
     border-radius: 50px;
     color: white;
     font-weight: bold;
     cursor: pointer;
     margin-top: 15px;
+    transition: 0.3s;
 }
 
-/* --- Ajuste para el botón ocultar contraseña (el del ojito) --- */
+button[type="submit"]:hover {
+    background: #3b82f6;
+    box-shadow: 0 0 15px rgba(59, 130, 246, 0.5);
+}
+
 button[type="button"] {
     background: transparent;
     border: none;
     cursor: pointer;
     margin: 5px;
+    color: white;
 }
 
 a {
-    color: #94a3b8;
+    color: #cbd5e1;
     text-decoration: none;
     font-size: 0.9rem;
     display: block;
