@@ -241,7 +241,6 @@ app.post('/like', requireLogin, async (req, res) => {
 app.post('/eliminar-perfil', requireLogin, async (req, res) => {
     try {
         const email = req.session.user.email;
-        // Borramos todo lo relacionado al usuario
         await pool.query('DELETE FROM likes WHERE email_origen = $1 OR email_destino = $1', [email]);
         await pool.query('DELETE FROM fotos WHERE usuario_email = $1', [email]);
         await pool.query('DELETE FROM usuarios WHERE email = $1', [email]);
@@ -255,7 +254,13 @@ app.post('/eliminar-perfil', requireLogin, async (req, res) => {
 app.get('/feed', requireLogin, async (req, res) => {
     try {
         const emailActual = req.session.user.email;
-        const result = await pool.query('SELECT u.nombre, u.email, f.url_foto FROM usuarios u LEFT JOIN fotos f ON u.email = f.usuario_email WHERE f.tipo = $1 AND u.email != $2', ['galeria', emailActual]);
+        
+        // Feed seguro excluyendo al usuario actual
+        const result = await pool.query(`
+            SELECT u.nombre, u.email, f.url_foto 
+            FROM usuarios u 
+            LEFT JOIN fotos f ON u.email = f.usuario_email 
+            WHERE f.tipo = 'galeria' AND u.email != $1`, [emailActual]);
         
         const cards = result.rows.map(u => `
             <div style="background:rgba(255,255,255,0.05); padding:15px; border-radius:15px; text-align:center; width:150px; margin: 10px;">
@@ -268,14 +273,14 @@ app.get('/feed', requireLogin, async (req, res) => {
                 </form>
             </div>`).join('');
 
-        // Query de Matches
+        // Query de Matches corregida y blindada
         const matchQuery = `
-            SELECT u.nombre, u.email, f.url_foto 
+            SELECT DISTINCT u.nombre, u.email, f.url_foto 
             FROM likes l1 
             JOIN likes l2 ON l1.email_origen = l2.email_destino AND l1.email_destino = l2.email_origen 
             JOIN usuarios u ON u.email = l1.email_destino
             LEFT JOIN fotos f ON u.email = f.usuario_email AND f.tipo = 'galeria'
-            WHERE l1.email_origen = $1
+            WHERE l1.email_origen = $1 AND l1.email_destino != $1
         `;
         const matchResult = await pool.query(matchQuery, [emailActual]);
         
@@ -353,4 +358,4 @@ app.get('/logout', (req, res) => {
     res.redirect('/login');
 });
 
-server.listen(process.env.PORT || 3000, () => console.log('Velo Producción activo con Chat, Legal, Likes, Matches y Borrado'));
+server.listen(process.env.PORT || 3000, () => console.log('Velo Producción activo con Chat, Legal, Likes, Matches y Borrado Seguro'));
