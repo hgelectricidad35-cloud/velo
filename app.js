@@ -238,9 +238,25 @@ app.post('/like', requireLogin, async (req, res) => {
     }
 });
 
+app.post('/eliminar-perfil', requireLogin, async (req, res) => {
+    try {
+        const email = req.session.user.email;
+        // Borramos todo lo relacionado al usuario
+        await pool.query('DELETE FROM likes WHERE email_origen = $1 OR email_destino = $1', [email]);
+        await pool.query('DELETE FROM fotos WHERE usuario_email = $1', [email]);
+        await pool.query('DELETE FROM usuarios WHERE email = $1', [email]);
+        req.session.destroy();
+        res.send('Perfil eliminado correctamente. <a href="/login">Volver al Login</a>');
+    } catch (err) {
+        res.status(500).send('Error al eliminar perfil: ' + err.message);
+    }
+});
+
 app.get('/feed', requireLogin, async (req, res) => {
     try {
-        const result = await pool.query('SELECT u.nombre, u.email, f.url_foto FROM usuarios u LEFT JOIN fotos f ON u.email = f.usuario_email WHERE f.tipo = $1', ['galeria']);
+        const emailActual = req.session.user.email;
+        const result = await pool.query('SELECT u.nombre, u.email, f.url_foto FROM usuarios u LEFT JOIN fotos f ON u.email = f.usuario_email WHERE f.tipo = $1 AND u.email != $2', ['galeria', emailActual]);
+        
         const cards = result.rows.map(u => `
             <div style="background:rgba(255,255,255,0.05); padding:15px; border-radius:15px; text-align:center; width:150px; margin: 10px;">
                 <img src="${u.url_foto}" style="width:80px; height:80px; border-radius:50%; object-fit:cover; margin-bottom:10px;">
@@ -251,15 +267,44 @@ app.get('/feed', requireLogin, async (req, res) => {
                     <button type="submit" style="background:#ff4757; border:none; color:white; padding:5px 10px; border-radius:5px; cursor:pointer;">❤️ Like</button>
                 </form>
             </div>`).join('');
+
+        // Query de Matches
+        const matchQuery = `
+            SELECT u.nombre, u.email, f.url_foto 
+            FROM likes l1 
+            JOIN likes l2 ON l1.email_origen = l2.email_destino AND l1.email_destino = l2.email_origen 
+            JOIN usuarios u ON u.email = l1.email_destino
+            LEFT JOIN fotos f ON u.email = f.usuario_email AND f.tipo = 'galeria'
+            WHERE l1.email_origen = $1
+        `;
+        const matchResult = await pool.query(matchQuery, [emailActual]);
+        
+        const matchesHTML = matchResult.rows.map(m => `
+            <div style="background:rgba(212,175,55,0.1); padding:10px; border-radius:10px; text-align:center; width:100px; border: 1px solid #d4af37;">
+                <img src="${m.url_foto}" style="width:50px; height:50px; border-radius:50%; object-fit:cover;">
+                <p style="margin:5px 0; font-size:0.9em; font-weight:bold;">${m.nombre}</p>
+                <a href="/chat" style="color:#d4af37; font-size:0.8em; text-decoration:none;">💬 Chatear</a>
+            </div>`).join('');
+
         res.send(`<html><head><link rel="stylesheet" href="/style.css"></head><body>
             <div class="glass-card" style="width: 90%;">
-                <h1>Velo Feed - Bienvenido ${req.session.user.nombre}</h1>
+                <h1>Velo - Bienvenido ${req.session.user.nombre}</h1>
+                
+                ${matchResult.rows.length > 0 ? `
+                    <div style="margin-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.2); padding-bottom: 15px;">
+                        <h3>🔥 Tus Matches</h3>
+                        <div style="display:flex; gap:15px; flex-wrap:wrap; justify-content:center;">${matchesHTML}</div>
+                    </div>
+                ` : ''}
+
+                <h3>Descubre gente nueva</h3>
                 <div style="display:flex; gap:20px; flex-wrap:wrap; justify-content:center;">${cards}</div>
-                <br><a href="/chat" style="color:white; display:block; margin:20px;">Ir al Chat</a>
+                
+                <br><a href="/chat" style="color:white; display:block; margin:20px;">Ir al Chat General</a>
                 <br><a href="/logout" style="color:white;">Cerrar sesión</a>
             </div></body></html>`);
     } catch (err) {
-        res.send('Error cargando feed: ' + err.message);
+        res.send('Error cargando feed y matches: ' + err.message);
     }
 });
 
@@ -287,6 +332,9 @@ app.get('/perfil/:email', requireLogin, async (req, res) => {
             } else {
                 formHTML += `<br><p style="color:gold;"><b>¡Eres usuario Premium!</b></p>`;
             }
+            formHTML += `<br><hr><form action="/eliminar-perfil" method="POST">
+                <button type="submit" style="background:#ff4757; color:white; padding:10px; border:none; border-radius:5px; cursor:pointer;">❌ Eliminar mi cuenta</button>
+            </form>`;
         }
         res.send(`<html><head><link rel="stylesheet" href="/style.css"></head><body>
             <div class="glass-card">
@@ -305,4 +353,4 @@ app.get('/logout', (req, res) => {
     res.redirect('/login');
 });
 
-server.listen(process.env.PORT || 3000, () => console.log('Velo Producción activo con Chat, Legal y Likes'));
+server.listen(process.env.PORT || 3000, () => console.log('Velo Producción activo con Chat, Legal, Likes, Matches y Borrado'));
