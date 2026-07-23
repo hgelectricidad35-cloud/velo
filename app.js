@@ -67,6 +67,7 @@ app.get('/login', (req, res) => {
                 <button type="submit">Entrar</button>
             </form>
             <br><a href="/register">¿No tenés cuenta? Registrate</a>
+            <br><a href="/recuperar" style="font-size:0.8em; color:#d4af37;">¿Olvidaste tu contraseña?</a>
             <br><br><a href="/legal" style="font-size:0.8em; color:gray;">Términos y Privacidad</a>
         </div></body></html>`);
 });
@@ -255,7 +256,6 @@ app.get('/feed', requireLogin, async (req, res) => {
     try {
         const emailActual = req.session.user.email;
         
-        // Feed seguro excluyendo al usuario actual
         const result = await pool.query(`
             SELECT u.nombre, u.email, f.url_foto 
             FROM usuarios u 
@@ -273,7 +273,6 @@ app.get('/feed', requireLogin, async (req, res) => {
                 </form>
             </div>`).join('');
 
-        // Query de Matches corregida y blindada
         const matchQuery = `
             SELECT DISTINCT u.nombre, u.email, f.url_foto 
             FROM likes l1 
