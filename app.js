@@ -91,7 +91,7 @@ app.get('/register', (req, res) => {
     res.send(`<html><head><link rel="stylesheet" href="/style.css"></head>
         <body><div class="glass-card">
             <h1>Registro Velo</h1>
-            <form action="/register" method="POST" enctype="multipart/form-data"> 
+            <form action="/register" method="POST" enctype="multipart/form-data">
                 <input type="text" name="nombre" placeholder="Nombre" required><br>
                 <input type="email" name="email" placeholder="Email" required><br>
                 <input type="password" name="password" placeholder="Clave" required><br>
@@ -133,7 +133,7 @@ app.get('/chat', requireLogin, (req, res) => {
     res.send(`<html><head><link rel="stylesheet" href="/style.css">
         <script src="/socket.io/socket.io.js"></script>
         <style>
-            .chat-container { width: 90%; max-width: 600px; height: 70vh; margin: 20px auto; display: flex; flex-direction: column; background: rgba(255, 255, 255, 0.05); backdrop-filter: blur(15px); border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 20px; padding: 20px; color: white; }
+           .chat-container { width: 90%; max-width: 600px; height: 70vh; margin: 20px auto; display: flex; flex-direction: column; background: rgba(255, 255, 255, 0.05); backdrop-filter: blur(15px); border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 20px; padding: 20px; color: white; }
             #messages { flex-grow: 1; overflow-y: auto; list-style: none; padding: 0; }
             #messages li { background: rgba(0, 0, 0, 0.3); padding: 10px; margin-bottom: 10px; border-radius: 10px; border-left: 3px solid #d4af37; }
             #form { display: flex; gap: 10px; margin-top: 10px; }
@@ -158,9 +158,9 @@ app.get('/chat', requireLogin, (req, res) => {
             const username = "${username}";
             form.addEventListener('submit', (e) => {
                 e.preventDefault();
-                if (input.value) { 
-                    socket.emit('chat message', { msg: input.value, user: username }); 
-                    input.value = ''; 
+                if (input.value) {
+                    socket.emit('chat message', { msg: input.value, user: username });
+                    input.value = '';
                 }
             });
             socket.on('chat message', (data) => {
@@ -255,13 +255,13 @@ app.post('/eliminar-perfil', requireLogin, async (req, res) => {
 app.get('/feed', requireLogin, async (req, res) => {
     try {
         const emailActual = req.session.user.email;
-        
+
         const result = await pool.query(`
-            SELECT u.nombre, u.email, f.url_foto 
-            FROM usuarios u 
-            LEFT JOIN fotos f ON u.email = f.usuario_email 
-            WHERE f.tipo = 'galeria' AND u.email != $1`, [emailActual]);
-        
+            SELECT u.nombre, u.email, f.url_foto
+            FROM usuarios u
+            LEFT JOIN fotos f ON u.email = f.usuario_email
+            WHERE f.tipo = 'galeria' AND u.email!= $1`, [emailActual]);
+
         const cards = result.rows.map(u => `
             <div style="background:rgba(255,255,255,0.05); padding:15px; border-radius:15px; text-align:center; width:150px; margin: 10px;">
                 <img src="${u.url_foto}" style="width:80px; height:80px; border-radius:50%; object-fit:cover; margin-bottom:10px;">
@@ -269,20 +269,20 @@ app.get('/feed', requireLogin, async (req, res) => {
                 <a href="/perfil/${u.email}" style="color:#d4af37; text-decoration:none;">Ver perfil</a>
                 <form action="/like" method="POST" style="margin-top:10px;">
                     <input type="hidden" name="email_destino" value="${u.email}">
-                    <button type="submit" style="background:#ff4757; border:none; color:white; padding:5px 10px; border-radius:5px; cursor:pointer;">❤️ Like</button>
+                    <button type="submit" style="background:#ff4757; border:none; color:white; padding:5px 10px; border-radius:5px; cursor:pointer;">❤ Like</button>
                 </form>
             </div>`).join('');
 
         const matchQuery = `
-            SELECT DISTINCT u.nombre, u.email, f.url_foto 
-            FROM likes l1 
-            JOIN likes l2 ON l1.email_origen = l2.email_destino AND l1.email_destino = l2.email_origen 
+            SELECT DISTINCT u.nombre, u.email, f.url_foto
+            FROM likes l1
+            JOIN likes l2 ON l1.email_origen = l2.email_destino AND l1.email_destino = l2.email_origen
             JOIN usuarios u ON u.email = l1.email_destino
             LEFT JOIN fotos f ON u.email = f.usuario_email AND f.tipo = 'galeria'
-            WHERE l1.email_origen = $1 AND l1.email_destino != $1
+            WHERE l1.email_origen = $1 AND l1.email_destino!= $1
         `;
         const matchResult = await pool.query(matchQuery, [emailActual]);
-        
+
         const matchesHTML = matchResult.rows.map(m => `
             <div style="background:rgba(212,175,55,0.1); padding:10px; border-radius:10px; text-align:center; width:100px; border: 1px solid #d4af37;">
                 <img src="${m.url_foto}" style="width:50px; height:50px; border-radius:50%; object-fit:cover;">
@@ -293,8 +293,8 @@ app.get('/feed', requireLogin, async (req, res) => {
         res.send(`<html><head><link rel="stylesheet" href="/style.css"></head><body>
             <div class="glass-card" style="width: 90%;">
                 <h1>Velo - Bienvenido ${req.session.user.nombre}</h1>
-                
-                ${matchResult.rows.length > 0 ? `
+
+                ${matchResult.rows.length > 0? `
                     <div style="margin-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.2); padding-bottom: 15px;">
                         <h3>🔥 Tus Matches</h3>
                         <div style="display:flex; gap:15px; flex-wrap:wrap; justify-content:center;">${matchesHTML}</div>
@@ -303,7 +303,7 @@ app.get('/feed', requireLogin, async (req, res) => {
 
                 <h3>Descubre gente nueva</h3>
                 <div style="display:flex; gap:20px; flex-wrap:wrap; justify-content:center;">${cards}</div>
-                
+
                 <br><a href="/chat" style="color:white; display:block; margin:20px;">Ir al Chat General</a>
                 <br><a href="/logout" style="color:white;">Cerrar sesión</a>
             </div></body></html>`);
@@ -320,7 +320,7 @@ app.get('/perfil/:email', requireLogin, async (req, res) => {
         if (usuarioResult.rows.length === 0) return res.send('Usuario no encontrado');
         const usuario = usuarioResult.rows[0];
         let galeriaHTML = fotosResult.rows.map(f => `<img src="${f.url_foto}" style="width:150px; margin:5px; border-radius:10px;">`).join('');
-        const emailSesion = req.session.user.email ? req.session.user.email.toLowerCase().trim() : 'VACIO';
+        const emailSesion = req.session.user.email? req.session.user.email.toLowerCase().trim() : 'VACIO';
         const emailPerfil = email.toLowerCase().trim();
         let formHTML = '';
         if (emailSesion === emailPerfil) {
@@ -357,4 +357,9 @@ app.get('/logout', (req, res) => {
     res.redirect('/login');
 });
 
-server.listen(process.env.PORT || 3000, () => console.log('Velo Producción activo con Chat, Legal, Likes, Matches y Borrado Seguro'));
+const PORT = process.env.PORT || 3000;
+if (process.env.VERCEL!== "1") {
+  server.listen(PORT, () => console.log('Velo Producción activo con Chat, Legal, Likes, Matches y Borrado Seguro'));
+}
+
+module.exports = app;
