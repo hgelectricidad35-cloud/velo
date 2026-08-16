@@ -1,13 +1,8 @@
-// VeloApp - INDEX SEGURO DEFINITIVO - Usa MP_ACCESS_TOKEN de Vercel Environment Variables
-// Subí este archivo como /api/index.js - Ya no tiene la llave pegada, la lee de Vercel
-// Es la versión definitiva y segura
-
 export default async function handler(req, res) {
   const MP_ACCESS_TOKEN = process.env.MP_ACCESS_TOKEN;
 
   if (req.method === "GET") {
-    const html = `
-<!DOCTYPE html>
+    const html = `<!DOCTYPE html>
 <html lang="es">
 <head>
 <meta charset="UTF-8">
@@ -15,7 +10,7 @@ export default async function handler(req, res) {
 <title>VeloApp - Verificar Pago</title>
 <style>
   body{font-family:system-ui;background:#0a0a0a;color:#fff;display:flex;justify-content:center;align-items:center;min-height:100vh;margin:0;padding:20px}
-  .card{background:#171717;border:1px solid #2a2a2a;border-radius:16px;padding:28px;max-width:420px;width:100%;box-shadow:0 10px 30px rgba(0,0,0,.5)}
+  .card{background:#171717;border:1px solid #2a2a2a;border-radius:16px;padding:28px;max-width:420px;width:100%}
   h1{margin:0 0 8px;font-size:22px} p{color:#999;font-size:14px;margin:0 0 20px}
   input,select{width:100%;padding:12px 14px;border-radius:10px;border:1px solid #333;background:#0f0f0f;color:#fff;margin-bottom:12px;font-size:15px;box-sizing:border-box}
   button{width:100%;padding:14px;background:#fff;color:#000;border:0;border-radius:10px;font-weight:700;font-size:16px;cursor:pointer}
@@ -40,7 +35,7 @@ export default async function handler(req, res) {
   <button id="btn" onclick="verificar()">Verificar y activar</button>
   <div id="ok" class="ok"></div>
   <div id="err" class="err"></div>
-  <small>El ID está en el mail de MercadoPago después de pagar. El sistema verifica que el pago esté APROBADO y con el monto correcto. Sin truchadas.</small>
+  <small>El ID está en el mail de MercadoPago después de pagar. El sistema verifica que el pago esté APROBADO y con el monto correcto.</small>
 </div>
 <script>
 async function verificar(){
@@ -54,7 +49,7 @@ async function verificar(){
   if(!pid||!email){err.innerText='Falta ID o email'; err.style.display='block'; return;}
   btn.disabled=true; btn.innerText='Verificando...';
   try{
-    const r=await fetch('/api/index.js',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({payment_id:pid,email,plan})});
+    const r=await fetch('/api',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({payment_id:pid,email,plan})});
     const data=await r.json();
     if(data.ok){
       ok.innerHTML='✅ <b>Pago verificado!</b><br>Monto: $'+data.monto+'<br>Email: '+email+'<br>Plan: '+plan.toUpperCase()+'<br><br>¡Ya podés entrar a VeloApp!';
@@ -75,9 +70,11 @@ async function verificar(){
   if (req.method === "POST") {
     try {
       if (!MP_ACCESS_TOKEN) {
-        return res.status(500).json({ ok: false, error: 'MP_ACCESS_TOKEN no configurado en Vercel. Agregalo en Environment Variables.' });
+        return res.status(500).json({ ok: false, error: 'MP_ACCESS_TOKEN no configurado en Vercel' });
       }
-      const { payment_id, email, plan } = req.body || {};
+      let body = req.body;
+      if(typeof body === 'string'){ try{ body = JSON.parse(body);}catch{} }
+      const { payment_id, email, plan } = body || {};
       if (!payment_id || !email) return res.status(400).json({ ok: false, error: 'Falta payment_id o email' });
 
       const mpRes = await fetch(`https://api.mercadopago.com/v1/payments/${payment_id}`, {
@@ -102,7 +99,6 @@ async function verificar(){
       }
 
       console.log(`VELOAPP PAGO OK: ${payment_id} ${email} ${plan} $${monto}`);
-
       return res.status(200).json({ ok: true, monto, email, plan });
 
     } catch (e) {
