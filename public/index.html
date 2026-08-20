@@ -202,9 +202,9 @@ const demoProfiles = [
 {name:"Valentina",age:23,city:"Rocha",bio:"Veterinaria, amo animales.",img:"https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=800"},
 {name:"Camila",age:25,city:"Colonia",bio:"Chef pastelera.",img:"https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=800"},
 ];
-let users = JSON.parse(localStorage.getItem('velo_users')||'[]');
-if(users.length===0){users=[{name:"gabriel",email:"gabriel@test.com",pass:"123",city:"Melo"}]; localStorage.setItem('velo_users',JSON.stringify(users));}
-let currentUser = JSON.parse(localStorage.getItem('velo_current')||'null');
+// Usuario autenticado por el backend real.
+// Usamos una clave nueva para no reutilizar las cuentas demo antiguas.
+let currentUser = JSON.parse(localStorage.getItem('velo_current_real')||'null');
 let currentIdx = 0;
 let premium = localStorage.getItem('velo_premium')==='true';
 let pendingPlan = 'gold';
@@ -230,9 +230,103 @@ function renderAuth(){
 }
 function openModal(t){closeModals(); document.getElementById('modal-'+t).classList.remove('hidden');}
 function closeModals(){document.getElementById('modal-login').classList.add('hidden'); document.getElementById('modal-register').classList.add('hidden');}
-function handleLogin(e){e.preventDefault();const email=document.getElementById('login-email').value.trim();const pass=document.getElementById('login-pass').value;const found=users.find(u=>u.email===email&&u.pass===pass);if(!found){showToast('Datos incorrectos');return;}currentUser=found;localStorage.setItem('velo_current',JSON.stringify(currentUser));closeModals();renderAuth();showToast('¡Hola '+found.name+'!');}
-function handleRegister(e){e.preventDefault();const name=document.getElementById('reg-name').value.trim();const email=document.getElementById('reg-email').value.trim();const city=document.getElementById('reg-city').value.trim();const pass=document.getElementById('reg-pass').value; if(users.find(u=>u.email===email)){showToast('Email ya registrado');return;} const u={name,email,city,pass}; users.push(u); localStorage.setItem('velo_users',JSON.stringify(users)); currentUser=u; localStorage.setItem('velo_current',JSON.stringify(u)); closeModals(); renderAuth(); showToast('Cuenta creada');}
-function logout(){localStorage.removeItem('velo_current');currentUser=null;renderAuth();showToast('Sesión cerrada');switchTab('encuentros');}
+async function handleLogin(e){
+ e.preventDefault();
+
+ const email=document.getElementById('login-email').value.trim();
+ const password=document.getElementById('login-pass').value;
+
+ try{
+   const res=await fetch('/api/auth/login',{
+     method:'POST',
+     headers:{'Content-Type':'application/json'},
+     body:JSON.stringify({email,password})
+   });
+
+   const data=await res.json();
+
+   if(!res.ok || !data.ok){
+     showToast(data.error || 'No se pudo iniciar sesión');
+     return;
+   }
+
+   currentUser={
+     name:data.user.nombre,
+     email:data.user.email,
+     city:data.user.ciudad || '',
+     membership:data.user.membresia || 'free'
+   };
+
+   // Guardamos solo datos de visualización, nunca la contraseña.
+   localStorage.setItem('velo_current_real',JSON.stringify(currentUser));
+   localStorage.removeItem('velo_current');
+   closeModals();
+   renderAuth();
+   showToast('¡Hola '+currentUser.name+'!');
+ }catch(err){
+   showToast('Error de conexión al iniciar sesión');
+ }
+}
+
+async function handleRegister(e){
+ e.preventDefault();
+
+ const name=document.getElementById('reg-name').value.trim();
+ const email=document.getElementById('reg-email').value.trim();
+ const city=document.getElementById('reg-city').value.trim();
+ const password=document.getElementById('reg-pass').value;
+
+ try{
+   const res=await fetch('/api/auth/register',{
+     method:'POST',
+     headers:{'Content-Type':'application/json'},
+     body:JSON.stringify({
+       nombre:name,
+       email:email,
+       ciudad:city,
+       password:password
+     })
+   });
+
+   const data=await res.json();
+
+   if(!res.ok || !data.ok){
+     showToast(data.error || 'No se pudo crear la cuenta');
+     return;
+   }
+
+   currentUser={
+     name:data.user.nombre,
+     email:data.user.email,
+     city:data.user.ciudad || city,
+     membership:data.user.membresia || 'free'
+   };
+
+   // La cuenta ya quedó guardada en Neon.
+   // Acá guardamos únicamente el estado visual del usuario conectado.
+   localStorage.setItem('velo_current_real',JSON.stringify(currentUser));
+   localStorage.removeItem('velo_current');
+   localStorage.removeItem('velo_users');
+   closeModals();
+   renderAuth();
+   showToast('✅ Cuenta creada y guardada');
+ }catch(err){
+   showToast('Error de conexión al crear la cuenta');
+ }
+}
+
+async function logout(){
+ try{
+   await fetch('/api/auth/logout',{method:'POST'});
+ }catch(err){}
+
+ localStorage.removeItem('velo_current_real');
+ localStorage.removeItem('velo_current');
+ currentUser=null;
+ renderAuth();
+ showToast('Sesión cerrada');
+ switchTab('encuentros');
+}
 function renderCard(){
  const p = demoProfiles[currentIdx % demoProfiles.length];
  document.getElementById('card-img').src = p.img;
