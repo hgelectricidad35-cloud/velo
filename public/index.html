@@ -56,7 +56,7 @@ body{font-family:'Inter',sans-serif;background:#08080A;color:#E8DCC6}
 
 <div class="bg-[#111113] border border-[#D4B78F]/15 rounded-[20px] p-4">
 <div class="font-semibold text-sm mb-3" style="color:#D4B78F">🌎 Filtros Globales • Todo el Mundo</div>
-<input id="filter-city" onkeyup="filterCity()" placeholder="Buscar ciudad, departamento o país... ej: Maldonado" class="w-full bg-[#08080A] border border-[#D4B78F]/15 rounded-full px-4 py-2 text-[13px] outline-none">
+<input id="filter-city" onkeyup="filterCity()" onchange="filterCity()" placeholder="Buscar ciudad, departamento o país... ej: Maldonado" class="w-full bg-[#08080A] border border-[#D4B78F]/15 rounded-full px-4 py-2 text-[13px] outline-none">
 <div class="flex flex-wrap gap-2 mt-3 text-[12px] max-h-[140px] overflow-y-auto scrollbar-thin pr-1" id="city-chips">
 <button onclick="setCity('Maldonado')" class="px-3 py-1 rounded-full border border-[#D4B78F]/20">Maldonado</button>
 <button onclick="setCity('Punta del Este')" class="px-3 py-1 rounded-full border border-[#D4B78F]/20">Punta del Este</button>
@@ -391,31 +391,103 @@ async function logout(){
  showToast('Sesión cerrada');
  switchTab('encuentros');
 }
+let peopleProfiles = [];
+let filteredPeopleProfiles = [];
+let globalMode = true;
+
+function activeProfiles(){
+ return filteredPeopleProfiles.length ? filteredPeopleProfiles : (peopleProfiles.length ? peopleProfiles : demoProfiles);
+}
+
 function renderCard(){
- const p = demoProfiles[currentIdx % demoProfiles.length];
- document.getElementById('card-img').src = p.img;
- document.getElementById('card-name').innerText = p.name+' '+p.age;
- document.getElementById('card-city').innerText = '📍 '+p.city;
- document.getElementById('card-bio').innerText = p.bio;
+ const list = activeProfiles();
+ if(!list.length) return;
+ const p = list[currentIdx % list.length];
+ document.getElementById('card-img').src = p.img || demoProfiles[0].img;
+ document.getElementById('card-name').innerText = p.name+' '+(p.age || '');
+ document.getElementById('card-city').innerText = '📍 '+([p.city,p.country].filter(Boolean).join(', ') || 'Sin ubicación');
+ document.getElementById('card-bio').innerText = p.bio || 'Usuario de VeloApp';
 }
 function renderStack(){
  const cont = document.getElementById('cards-stack');
- cont.innerHTML = demoProfiles.slice(0,5).map(p=>`<img src="${p.img}" class="w-12 h-12 rounded-full object-cover border-2 border-[#111113] -ml-2 first:ml-0">`).join('');
+ const list = activeProfiles();
+ cont.innerHTML = list.slice(0,5).map(p=>`<img src="${p.img || demoProfiles[0].img}" class="w-12 h-12 rounded-full object-cover border-2 border-[#111113] -ml-2 first:ml-0">`).join('');
 }
-function like(){currentIdx++; renderCard(); showToast('❤️ Like a '+demoProfiles[(currentIdx-1)%demoProfiles.length].name);}
+function like(){
+ const list=activeProfiles(); if(!list.length)return;
+ const p=list[currentIdx%list.length]; currentIdx++; renderCard(); showToast('❤️ Like a '+p.name);
+}
 function dislike(){currentIdx++; renderCard(); showToast('👋 Pasaste');}
 function superlike(){showToast('⭐ SuperLike enviado!'); currentIdx++; renderCard();}
+
+async function loadPeople(){
+ try{
+   const res=await fetch('/api?action=people',{cache:'no-store'});
+   const data=await res.json();
+   if(!data.ok) throw new Error(data.error||'No se pudieron cargar perfiles');
+   peopleProfiles=(data.people||[]).map(u=>({
+     id:u.id,
+     name:u.nombre||'Usuario Velo',
+     age:u.edad||'',
+     city:u.ciudad||'',
+     country:u.pais||'',
+     gender:u.genero||'',
+     looking:u.busca||'',
+     bio:u.bio||'Usuario de VeloApp',
+     img:u.foto_url||demoProfiles[0].img
+   }));
+   applyPeopleFilters(false);
+   showToast('🌎 '+peopleProfiles.length+' perfil'+(peopleProfiles.length===1?'':'es')+' real'+(peopleProfiles.length===1?'':'es')+' cargado'+(peopleProfiles.length===1?'':'s'));
+ }catch(err){
+   console.error(err);
+   showToast('⚠️ No pude cargar Gente Cerca');
+ }
+}
+
+function normalizeText(v){
+ return (v||'').toString().normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
+}
+
+function applyPeopleFilters(showMessage=true){
+ const q=normalizeText(document.getElementById('filter-city').value);
+ const maxAge=Number(document.getElementById('age-range').value||65);
+ filteredPeopleProfiles=peopleProfiles.filter(p=>{
+   const location=normalizeText([p.city,p.country].filter(Boolean).join(' '));
+   const locationOk=!q || location.includes(q);
+   const countryOk=globalMode || normalizeText(p.country)==='uruguay';
+   const ageOk=!p.age || (Number(p.age)>=18 && Number(p.age)<=maxAge);
+   return locationOk && countryOk && ageOk;
+ });
+ currentIdx=0;
+ document.getElementById('near-count').innerText=filteredPeopleProfiles.length;
+ if(filteredPeopleProfiles.length){
+   renderCard(); renderStack();
+   if(showMessage) showToast('🔎 '+filteredPeopleProfiles.length+' perfil'+(filteredPeopleProfiles.length===1?'':'es')+' encontrado'+(filteredPeopleProfiles.length===1?'':'s'));
+ }else if(peopleProfiles.length){
+   if(showMessage) showToast('🔎 No hay perfiles con ese filtro todavía');
+ }
+}
+
 function switchTab(t){
  document.querySelectorAll('[id^=tab-]').forEach(b=>{b.classList.remove('bg-[#D4B78F]','text-black'); b.style.color='#D4B78F';});
  const active = document.getElementById('tab-'+t); if(active){active.classList.add('bg-[#D4B78F]','text-black'); active.style.color='black';}
+ if(t==='cerca') loadPeople();
 }
-function setCity(c){document.getElementById('filter-city').value=c; showToast('Filtro: '+c);}
-function filterCity(){}
+function setCity(c){
+ document.getElementById('filter-city').value=c;
+ applyPeopleFilters();
+}
+function filterCity(){applyPeopleFilters(false);}
 function setGlobal(isGlobal){
+ globalMode=isGlobal;
  document.getElementById('btn-global').className = isGlobal ? 'px-3 py-1.5 rounded-full bg-[#D4B78F] text-black text-xs font-semibold' : 'px-3 py-1.5 rounded-full border border-[#D4B78F]/20 text-xs';
  document.getElementById('btn-uy').className = !isGlobal ? 'px-3 py-1.5 rounded-full bg-[#D4B78F] text-black text-xs font-semibold' : 'px-3 py-1.5 rounded-full border border-[#D4B78F]/20 text-xs';
+ applyPeopleFilters();
 }
-function updateAge(){document.getElementById('age-label').innerText='18 - '+document.getElementById('age-range').value;}
+function updateAge(){
+ document.getElementById('age-label').innerText='18 - '+document.getElementById('age-range').value;
+ applyPeopleFilters(false);
+}
 
 function openCheckout(plan){
   pendingPlan = plan;
