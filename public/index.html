@@ -503,7 +503,33 @@ function setCity(c){
  document.getElementById('btn-uy').className='px-3 py-1.5 rounded-full border border-[#D4B78F]/20 text-xs';
  applyPeopleFilters();
 }
-function filterCity(){applyPeopleFilters(false);}
+function filterCity(){
+  const input=document.getElementById('filter-city');
+  const q=(input?.value||'').trim();
+
+  if(q){
+    globalMode=true;
+    document.getElementById('btn-global').className='px-3 py-1.5 rounded-full bg-[#D4B78F] text-black text-xs font-semibold';
+    document.getElementById('btn-uy').className='px-3 py-1.5 rounded-full border border-[#D4B78F]/20 text-xs';
+
+    document.querySelectorAll('[id^=tab-]').forEach(b=>{
+      b.classList.remove('bg-[#D4B78F]','text-black');
+      b.style.color='#D4B78F';
+    });
+    const cerca=document.getElementById('tab-cerca');
+    if(cerca){
+      cerca.classList.add('bg-[#D4B78F]','text-black');
+      cerca.style.color='black';
+    }
+  }
+
+  if(!peopleProfiles.length){
+    loadPeople();
+    return;
+  }
+
+  applyPeopleFilters(false);
+}
 function setGlobal(isGlobal){
  globalMode=isGlobal;
  document.getElementById('btn-global').className = isGlobal ? 'px-3 py-1.5 rounded-full bg-[#D4B78F] text-black text-xs font-semibold' : 'px-3 py-1.5 rounded-full border border-[#D4B78F]/20 text-xs';
