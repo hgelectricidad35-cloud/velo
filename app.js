@@ -132,6 +132,161 @@ app.get('/', (req, res) => {
 });
 
 // ======================================================
+// API REAL PARA LA PORTADA (NEON)
+// ======================================================
+
+// Registro desde public/index.html.
+// No exige foto: la foto se podrá agregar después desde el perfil.
+app.post('/api/auth/register', async (req, res) => {
+    try {
+        const nombre = String(req.body?.nombre || '').trim();
+        const email = String(req.body?.email || '').trim().toLowerCase();
+        const ciudad = String(req.body?.ciudad || '').trim();
+        const password = String(req.body?.password || '');
+
+        if (!nombre || !email || !ciudad || !password) {
+            return res.status(400).json({
+                ok: false,
+                error: 'Completá nombre, email, ciudad y contraseña.'
+            });
+        }
+
+        const existente = await pool.query(
+            'SELECT id FROM usuarios WHERE LOWER(email) = LOWER($1) LIMIT 1',
+            [email]
+        );
+
+        if (existente.rows.length > 0) {
+            return res.status(409).json({
+                ok: false,
+                error: 'Ese email ya está registrado.'
+            });
+        }
+
+        // La tabla actual no tiene columna ciudad todavía.
+        // Guardamos los campos que existen y conservamos ciudad en la sesión
+        // para que la interfaz actual pueda seguir mostrándola.
+        const result = await pool.query(
+            `
+            INSERT INTO usuarios
+                (nombre, email, password, membresia)
+            VALUES
+                ($1, $2, $3, $4)
+            RETURNING id, nombre, email, membresia
+            `,
+            [nombre, email, password, 'free']
+        );
+
+        const user = {
+            id: result.rows[0].id,
+            nombre: result.rows[0].nombre,
+            email: result.rows[0].email,
+            ciudad,
+            membresia: result.rows[0].membresia
+        };
+
+        req.session.user = user;
+
+        return res.status(201).json({
+            ok: true,
+            user
+        });
+
+    } catch (err) {
+        console.error('VELOAPP API REGISTER ERROR:', err);
+
+        return res.status(500).json({
+            ok: false,
+            error: 'No se pudo crear la cuenta.'
+        });
+    }
+});
+
+// Login desde public/index.html.
+app.post('/api/auth/login', async (req, res) => {
+    try {
+        const email = String(req.body?.email || '').trim().toLowerCase();
+        const password = String(req.body?.password || '');
+
+        if (!email || !password) {
+            return res.status(400).json({
+                ok: false,
+                error: 'Ingresá email y contraseña.'
+            });
+        }
+
+        const result = await pool.query(
+            `
+            SELECT id, nombre, email, membresia
+            FROM usuarios
+            WHERE LOWER(email) = LOWER($1)
+              AND password = $2
+            LIMIT 1
+            `,
+            [email, password]
+        );
+
+        if (result.rows.length === 0) {
+            return res.status(401).json({
+                ok: false,
+                error: 'Email o contraseña incorrectos.'
+            });
+        }
+
+        const user = result.rows[0];
+        req.session.user = user;
+
+        return res.status(200).json({
+            ok: true,
+            user
+        });
+
+    } catch (err) {
+        console.error('VELOAPP API LOGIN ERROR:', err);
+
+        return res.status(500).json({
+            ok: false,
+            error: 'No se pudo iniciar sesión.'
+        });
+    }
+});
+
+// Permite a la portada comprobar si existe una sesión real.
+app.get('/api/auth/me', (req, res) => {
+    if (!req.session.user) {
+        return res.status(200).json({
+            ok: true,
+            user: null
+        });
+    }
+
+    return res.status(200).json({
+        ok: true,
+        user: req.session.user
+    });
+});
+
+// Cierre de sesión para la portada.
+app.post('/api/auth/logout', (req, res) => {
+    req.session.destroy((err) => {
+        if (err) {
+            console.error('VELOAPP API LOGOUT ERROR:', err);
+
+            return res.status(500).json({
+                ok: false,
+                error: 'No se pudo cerrar la sesión.'
+            });
+        }
+
+        res.clearCookie('connect.sid');
+
+        return res.status(200).json({
+            ok: true
+        });
+    });
+});
+
+// ======================================================
 // LOGIN
 // ======================================================
 
