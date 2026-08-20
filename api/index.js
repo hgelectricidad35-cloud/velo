@@ -1,8 +1,32 @@
-export default async function handler(req, res) {
-  const MP_ACCESS_TOKEN = process.env.MP_ACCESS_TOKEN;
+import { Pool } from 'pg';
 
-  if (req.method === "GET") {
-    const html = `<!DOCTYPE html>
+const databaseUrl =
+  process.env.VELOAPP_DB_DATABASE_URL ||
+  process.env.DATABASE_URL;
+
+const pool = new Pool({
+  connectionString: databaseUrl,
+  ssl: {
+    rejectUnauthorized: false
+  }
+});
+
+function getBody(req) {
+  if (!req.body) return {};
+
+  if (typeof req.body === 'string') {
+    try {
+      return JSON.parse(req.body);
+    } catch {
+      return {};
+    }
+  }
+
+  return req.body;
+}
+
+function sendPaymentPage(res) {
+  const html = `<!DOCTYPE html>
 <html lang="es">
 <head>
 <meta charset="UTF-8">
@@ -63,49 +87,263 @@ async function verificar(){
 </script>
 </body>
 </html>`;
-    res.setHeader('Content-Type', 'text/html');
-    return res.status(200).send(html);
-  }
 
-  if (req.method === "POST") {
-    try {
-      if (!MP_ACCESS_TOKEN) {
-        return res.status(500).json({ ok: false, error: 'MP_ACCESS_TOKEN no configurado en Vercel' });
-      }
-      let body = req.body;
-      if(typeof body === 'string'){ try{ body = JSON.parse(body);}catch{} }
-      const { payment_id, email, plan } = body || {};
-      if (!payment_id || !email) return res.status(400).json({ ok: false, error: 'Falta payment_id o email' });
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  return res.status(200).send(html);
+}
 
-      const mpRes = await fetch(`https://api.mercadopago.com/v1/payments/${payment_id}`, {
-        headers: { Authorization: `Bearer ${MP_ACCESS_TOKEN}` }
+async function registerUser(req, res) {
+  try {
+    if (!databaseUrl) {
+      return res.status(500).json({
+        ok: false,
+        error: 'Base de datos no configurada en Vercel'
       });
-
-      if (!mpRes.ok) {
-        return res.status(400).json({ ok: false, error: 'ID no encontrado en MercadoPago. Verifica el ID.' });
-      }
-
-      const pago = await mpRes.json();
-
-      if (pago.status !== 'approved') {
-        return res.status(400).json({ ok: false, error: `Pago no aprobado. Estado: ${pago.status}` });
-      }
-
-      const monto = pago.transaction_amount;
-      const minimo = plan === 'platinum' ? 3490 : 1990;
-
-      if (monto < minimo - 50) {
-        return res.status(400).json({ ok: false, error: `Monto insuficiente. Pagó $${monto}, se esperaba $${minimo}` });
-      }
-
-      console.log(`VELOAPP PAGO OK: ${payment_id} ${email} ${plan} $${monto}`);
-      return res.status(200).json({ ok: true, monto, email, plan });
-
-    } catch (e) {
-      console.error(e);
-      return res.status(500).json({ ok: false, error: 'Error interno: ' + e.message });
     }
+
+    const body = getBody(req);
+    const nombre = String(body.nombre || '').trim();
+    const email = String(body.email || '').trim().toLowerCase();
+    const ciudad = String(body.ciudad || '').trim();
+    const password = String(body.password || '');
+
+    if (!nombre || !email || !ciudad || !password) {
+      return res.status(400).json({
+        ok: false,
+        error: 'Completá nombre, email, ciudad y contraseña.'
+      });
+    }
+
+    const existe = await pool.query(
+      'SELECT id FROM usuarios WHERE LOWER(email)=LOWER($1) LIMIT 1',
+      [email]
+    );
+
+    if (existe.rows.length > 0) {
+      return res.status(409).json({
+        ok: false,
+        error: 'Ese email ya está registrado.'
+      });
+    }
+
+    const result = await pool.query(
+      `INSERT INTO usuarios (nombre, email, password, membresia)
+       VALUES ($1, $2, $3, $4)
+       RETURNING id, nombre, email, membresia`,
+      [nombre, email, password, 'free']
+    );
+
+    return res.status(201).json({
+      ok: true,
+      user: {
+        id: result.rows[0].id,
+        nombre: result.rows[0].nombre,
+        email: result.rows[0].email,
+        ciudad,
+        membresia: result.rows[0].membresia
+      }
+    });
+  } catch (e) {
+    console.error('VELOAPP REGISTER API ERROR:', e);
+    return res.status(500).json({
+      ok: false,
+      error: 'No se pudo crear la cuenta: ' + e.message
+    });
+  }
+}
+
+async function loginUser(req, res) {
+  try {
+    if (!databaseUrl) {
+      return res.status(500).json({
+        ok: false,
+        error: 'Base de datos no configurada en Vercel'
+      });
+    }
+
+    const body = getBody(req);
+    const email = String(body.email || '').trim().toLowerCase();
+    const password = String(body.password || '');
+
+    if (!email || !password) {
+      return res.status(400).json({
+        ok: false,
+        error: 'Ingresá email y contraseña.'
+      });
+    }
+
+    const result = await pool.query(
+      `SELECT id, nombre, email, membresia
+       FROM usuarios
+       WHERE LOWER(email)=LOWER($1)
+       AND password=$2
+       LIMIT 1`,
+      [email, password]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(401).json({
+        ok: false,
+        error: 'Email o contraseña incorrectos.'
+      });
+    }
+
+    return res.status(200).json({
+      ok: true,
+      user: result.rows[0]
+    });
+  } catch (e) {
+    console.error('VELOAPP LOGIN API ERROR:', e);
+    return res.status(500).json({
+      ok: false,
+      error: 'No se pudo iniciar sesión: ' + e.message
+    });
+  }
+}
+
+async function verifyPayment(req, res) {
+  try {
+    const MP_ACCESS_TOKEN = process.env.MP_ACCESS_TOKEN;
+
+    if (!MP_ACCESS_TOKEN) {
+      return res.status(500).json({
+        ok: false,
+        error: 'MP_ACCESS_TOKEN no configurado en Vercel'
+      });
+    }
+
+    const body = getBody(req);
+    const { payment_id, email, plan } = body || {};
+
+    if (!payment_id || !email) {
+      return res.status(400).json({
+        ok: false,
+        error: 'Falta payment_id o email'
+      });
+    }
+
+    const mpRes = await fetch(
+      `https://api.mercadopago.com/v1/payments/${payment_id}`,
+      {
+        headers: {
+          Authorization: `Bearer ${MP_ACCESS_TOKEN}`
+        }
+      }
+    );
+
+    if (!mpRes.ok) {
+      return res.status(400).json({
+        ok: false,
+        error: 'ID no encontrado en MercadoPago. Verifica el ID.'
+      });
+    }
+
+    const pago = await mpRes.json();
+
+    if (pago.status !== 'approved') {
+      return res.status(400).json({
+        ok: false,
+        error: `Pago no aprobado. Estado: ${pago.status}`
+      });
+    }
+
+    const monto = pago.transaction_amount;
+    const minimo = plan === 'platinum' ? 3490 : 1990;
+
+    if (monto < minimo - 50) {
+      return res.status(400).json({
+        ok: false,
+        error: `Monto insuficiente. Pagó $${monto}, se esperaba $${minimo}`
+      });
+    }
+
+    console.log(
+      `VELOAPP PAGO OK: ${payment_id} ${email} ${plan} $${monto}`
+    );
+
+    return res.status(200).json({
+      ok: true,
+      monto,
+      email,
+      plan
+    });
+  } catch (e) {
+    console.error('VELOAPP PAYMENT API ERROR:', e);
+
+    return res.status(500).json({
+      ok: false,
+      error: 'Error interno: ' + e.message
+    });
+  }
+}
+
+export default async function handler(req, res) {
+  const action = String(req.query?.action || '').trim().toLowerCase();
+
+  // Registro real desde la portada.
+  if (action === 'register') {
+    if (req.method !== 'POST') {
+      return res.status(405).json({
+        ok: false,
+        error: 'Método no permitido'
+      });
+    }
+
+    return registerUser(req, res);
   }
 
-  return res.status(405).json({ ok: false, error: 'Método no permitido' });
+  // Login real desde la portada.
+  if (action === 'login') {
+    if (req.method !== 'POST') {
+      return res.status(405).json({
+        ok: false,
+        error: 'Método no permitido'
+      });
+    }
+
+    return loginUser(req, res);
+  }
+
+  // El logout de la portada es visual/local por ahora.
+  if (action === 'logout') {
+    if (req.method !== 'POST') {
+      return res.status(405).json({
+        ok: false,
+        error: 'Método no permitido'
+      });
+    }
+
+    return res.status(200).json({
+      ok: true
+    });
+  }
+
+  // Endpoint simple de prueba.
+  if (action === 'me') {
+    if (req.method !== 'GET') {
+      return res.status(405).json({
+        ok: false,
+        error: 'Método no permitido'
+      });
+    }
+
+    return res.status(200).json({
+      ok: true,
+      user: null
+    });
+  }
+
+  // Mantiene intacta la pantalla/verificación actual de Mercado Pago.
+  if (req.method === 'GET') {
+    return sendPaymentPage(res);
+  }
+
+  if (req.method === 'POST') {
+    return verifyPayment(req, res);
+  }
+
+  return res.status(405).json({
+    ok: false,
+    error: 'Método no permitido'
+  });
 }
