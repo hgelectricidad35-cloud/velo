@@ -149,9 +149,25 @@ body{font-family:'Inter',sans-serif;background:#08080A;color:#E8DCC6}
 <form onsubmit="handleRegister(event)" class="space-y-3">
 <input id="reg-name" type="text" placeholder="Nombre" required class="w-full bg-[#08080A] border border-[#D4B78F]/15 rounded-full px-4 py-2.5 text-sm outline-none">
 <input id="reg-email" type="email" placeholder="Email" required class="w-full bg-[#08080A] border border-[#D4B78F]/15 rounded-full px-4 py-2.5 text-sm outline-none">
-<input id="reg-city" type="text" placeholder="Ciudad (ej: Melo)" required class="w-full bg-[#08080A] border border-[#D4B78F]/15 rounded-full px-4 py-2.5 text-sm outline-none">
-<input id="reg-pass" type="password" placeholder="Contraseña" required class="w-full bg-[#08080A] border border-[#D4B78F]/15 rounded-full px-4 py-2.5 text-sm outline-none">
+<input id="reg-country" type="text" placeholder="País (ej: Uruguay, España, Argentina...)" required class="w-full bg-[#08080A] border border-[#D4B78F]/15 rounded-full px-4 py-2.5 text-sm outline-none">
+<input id="reg-city" type="text" placeholder="Ciudad" required class="w-full bg-[#08080A] border border-[#D4B78F]/15 rounded-full px-4 py-2.5 text-sm outline-none">
+<input id="reg-pass" type="password" placeholder="Contraseña" required minlength="6" class="w-full bg-[#08080A] border border-[#D4B78F]/15 rounded-full px-4 py-2.5 text-sm outline-none">
+
+<div class="bg-[#08080A] border border-[#D4B78F]/15 rounded-[16px] p-3 space-y-3">
+<label class="flex items-start gap-3 cursor-pointer">
+<input id="reg-age18" type="checkbox" required class="mt-1 accent-[#D4B78F]">
+<span class="text-[12px] leading-relaxed"><b style="color:#D4B78F">Confirmo que tengo 18 años o más.</b><br><span class="opacity-60">VeloApp es exclusivamente para personas adultas.</span></span>
+</label>
+<label class="flex items-start gap-3 cursor-pointer">
+<input id="reg-terms" type="checkbox" required class="mt-1 accent-[#D4B78F]">
+<span class="text-[12px] leading-relaxed">Acepto los <b style="color:#D4B78F">Términos de uso</b>, la <b style="color:#D4B78F">Política de privacidad</b> y las normas de convivencia de VeloApp.</span>
+</label>
+</div>
+
+<div id="register-consent-error" class="hidden text-[11px] text-red-400 bg-red-500/10 border border-red-500/20 rounded-xl px-3 py-2"></div>
+
 <button class="w-full bg-[#D4B78F] text-black rounded-full py-2.5 font-bold text-sm">Crear cuenta</button>
+<div class="text-[10px] opacity-45 text-center leading-relaxed">Al crear una cuenta declarás que la información proporcionada es verdadera y que cumplís los requisitos de edad de VeloApp.</div>
 </form>
 </div>
 </div>
@@ -343,8 +359,29 @@ async function handleRegister(e){
 
  const name=document.getElementById('reg-name').value.trim();
  const email=document.getElementById('reg-email').value.trim();
+ const country=document.getElementById('reg-country').value.trim();
  const city=document.getElementById('reg-city').value.trim();
  const password=document.getElementById('reg-pass').value;
+ const age18=document.getElementById('reg-age18').checked;
+ const terms=document.getElementById('reg-terms').checked;
+ const consentError=document.getElementById('register-consent-error');
+
+ consentError.classList.add('hidden');
+ consentError.innerText='';
+
+ if(!age18){
+   consentError.innerText='Debés confirmar que tenés 18 años o más para usar VeloApp.';
+   consentError.classList.remove('hidden');
+   showToast('🔞 VeloApp es solo para mayores de 18 años');
+   return;
+ }
+
+ if(!terms){
+   consentError.innerText='Debés aceptar los Términos de uso y la Política de privacidad.';
+   consentError.classList.remove('hidden');
+   showToast('Aceptá los términos para continuar');
+   return;
+ }
 
  try{
    const res=await fetch('/api/auth/register',{
@@ -353,8 +390,11 @@ async function handleRegister(e){
      body:JSON.stringify({
        nombre:name,
        email:email,
+       pais:country,
        ciudad:city,
-       password:password
+       password:password,
+       mayor18:true,
+       acepta_terminos:true
      })
    });
 
@@ -368,18 +408,17 @@ async function handleRegister(e){
    currentUser={
      name:data.user.nombre,
      email:data.user.email,
+     country:data.user.pais || country,
      city:data.user.ciudad || city,
      membership:data.user.membresia || 'free'
    };
 
-   // La cuenta ya quedó guardada en Neon.
-   // Acá guardamos únicamente el estado visual del usuario conectado.
    localStorage.setItem('velo_current_real',JSON.stringify(currentUser));
    localStorage.removeItem('velo_current');
    localStorage.removeItem('velo_users');
    closeModals();
    renderAuth();
-   showToast('✅ Cuenta creada y guardada');
+   showToast('✅ Cuenta 18+ creada y guardada');
  }catch(err){
    showToast('Error de conexión al crear la cuenta');
  }
