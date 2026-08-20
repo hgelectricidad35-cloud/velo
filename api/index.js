@@ -206,6 +206,10 @@ async function loginUser(req, res) {
 
 async function getProfile(req, res) {
   try {
+    if (!databaseUrl) {
+      return res.status(500).json({ ok: false, error: 'Base de datos no configurada en Vercel' });
+    }
+
     const email = String(req.query?.email || '').trim().toLowerCase();
 
     if (!email) {
@@ -238,6 +242,10 @@ async function getProfile(req, res) {
 
 async function updateProfile(req, res) {
   try {
+    if (!databaseUrl) {
+      return res.status(500).json({ ok: false, error: 'Base de datos no configurada en Vercel' });
+    }
+
     const body = getBody(req);
     const email = String(body.email || '').trim().toLowerCase();
 
@@ -330,6 +338,77 @@ async function updateProfile(req, res) {
   }
 }
 
+async function searchPeople(req, res) {
+  try {
+    if (!databaseUrl) {
+      return res.status(500).json({ ok: false, error: 'Base de datos no configurada en Vercel' });
+    }
+
+    const q = String(req.query?.q || '').trim();
+    const country = String(req.query?.country || '').trim();
+    const city = String(req.query?.city || '').trim();
+    const excludeEmail = String(req.query?.excludeEmail || '').trim().toLowerCase();
+
+    const minAgeRaw = Number(req.query?.minAge || 18);
+    const maxAgeRaw = Number(req.query?.maxAge || 120);
+    const minAge = Number.isFinite(minAgeRaw) ? Math.max(18, minAgeRaw) : 18;
+    const maxAge = Number.isFinite(maxAgeRaw) ? Math.min(120, maxAgeRaw) : 120;
+
+    const params = [];
+    const where = ['(edad IS NULL OR (edad >= $1 AND edad <= $2))'];
+    params.push(minAge, maxAge);
+
+    if (q) {
+      params.push(`%${q}%`);
+      const n = params.length;
+      where.push(`(
+        COALESCE(nombre,'') ILIKE $${n}
+        OR COALESCE(pais,'') ILIKE $${n}
+        OR COALESCE(ciudad,'') ILIKE $${n}
+        OR COALESCE(bio,'') ILIKE $${n}
+      )`);
+    }
+
+    if (country) {
+      params.push(country);
+      where.push(`LOWER(COALESCE(pais,'')) = LOWER($${params.length})`);
+    }
+
+    if (city) {
+      params.push(city);
+      where.push(`LOWER(COALESCE(ciudad,'')) = LOWER($${params.length})`);
+    }
+
+    if (excludeEmail) {
+      params.push(excludeEmail);
+      where.push(`LOWER(email) <> LOWER($${params.length})`);
+    }
+
+    const result = await pool.query(
+      `SELECT
+        id, nombre, membresia, pais, ciudad, edad, genero, busca,
+        bio, foto_url, latitud, longitud, actualizado_en
+       FROM usuarios
+       WHERE ${where.join(' AND ')}
+       ORDER BY actualizado_en DESC NULLS LAST, id DESC
+       LIMIT 50`,
+      params
+    );
+
+    return res.status(200).json({
+      ok: true,
+      count: result.rows.length,
+      people: result.rows
+    });
+  } catch (e) {
+    console.error('VELOAPP SEARCH PEOPLE ERROR:', e);
+    return res.status(500).json({
+      ok: false,
+      error: 'No se pudo buscar gente: ' + e.message
+    });
+  }
+}
+
 async function verifyPayment(req, res) {
   try {
     const MP_ACCESS_TOKEN = process.env.MP_ACCESS_TOKEN;
@@ -409,79 +488,52 @@ async function verifyPayment(req, res) {
 export default async function handler(req, res) {
   const action = String(req.query?.action || '').trim().toLowerCase();
 
-  // Registro real desde la portada.
   if (action === 'register') {
     if (req.method !== 'POST') {
-      return res.status(405).json({
-        ok: false,
-        error: 'Método no permitido'
-      });
+      return res.status(405).json({ ok: false, error: 'Método no permitido' });
     }
-
     return registerUser(req, res);
   }
 
-  // Login real desde la portada.
   if (action === 'login') {
     if (req.method !== 'POST') {
-      return res.status(405).json({
-        ok: false,
-        error: 'Método no permitido'
-      });
+      return res.status(405).json({ ok: false, error: 'Método no permitido' });
     }
-
     return loginUser(req, res);
   }
 
-
-  // Perfil real guardado en Neon.
-  // GET  /api?action=profile&email=...
-  // POST /api?action=profile
   if (action === 'profile') {
     if (req.method === 'GET') {
       return getProfile(req, res);
     }
-
     if (req.method === 'POST') {
       return updateProfile(req, res);
     }
-
-    return res.status(405).json({
-      ok: false,
-      error: 'Método no permitido'
-    });
+    return res.status(405).json({ ok: false, error: 'Método no permitido' });
   }
 
-  // El logout de la portada es visual/local por ahora.
+  // Búsqueda real e internacional de perfiles en Neon.
+  if (action === 'people') {
+    if (req.method !== 'GET') {
+      return res.status(405).json({ ok: false, error: 'Método no permitido' });
+    }
+    return searchPeople(req, res);
+  }
+
   if (action === 'logout') {
     if (req.method !== 'POST') {
-      return res.status(405).json({
-        ok: false,
-        error: 'Método no permitido'
-      });
+      return res.status(405).json({ ok: false, error: 'Método no permitido' });
     }
-
-    return res.status(200).json({
-      ok: true
-    });
+    return res.status(200).json({ ok: true });
   }
 
-  // Endpoint simple de prueba.
   if (action === 'me') {
     if (req.method !== 'GET') {
-      return res.status(405).json({
-        ok: false,
-        error: 'Método no permitido'
-      });
+      return res.status(405).json({ ok: false, error: 'Método no permitido' });
     }
-
-    return res.status(200).json({
-      ok: true,
-      user: null
-    });
+    return res.status(200).json({ ok: true, user: null });
   }
 
-  // Mantiene intacta la pantalla/verificación actual de Mercado Pago.
   if (req.method === 'GET') {
     return sendPaymentPage(res);
   }
