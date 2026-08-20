@@ -150,6 +150,28 @@ body{font-family:'Inter',sans-serif;background:#08080A;color:#E8DCC6}
 </div>
 </div>
 
+
+<!-- MI PERFIL -->
+<div id="modal-profile" class="hidden fixed inset-0 z-[55] bg-black/75 flex items-center justify-center p-4">
+<div class="bg-[#111113] border border-[#D4B78F]/25 rounded-[24px] p-6 w-full max-w-[560px] max-h-[90vh] overflow-y-auto card-shadow">
+<div class="flex justify-between items-center mb-5"><div><div class="serif text-xl font-bold" style="color:#D4B78F">Mi perfil</div><div class="text-[11px] opacity-50 mt-1">Completá tus datos para aparecer en Encuentros y Gente Cerca</div></div><button onclick="closeProfile()" class="opacity-60 text-lg">✕</button></div>
+<form onsubmit="saveProfile(event)" class="space-y-4">
+<div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+<div><label class="text-[11px] opacity-60 ml-2">Nombre</label><input id="profile-name" type="text" disabled class="w-full mt-1 bg-[#08080A]/60 border border-[#D4B78F]/10 rounded-full px-4 py-2.5 text-sm opacity-70"></div>
+<div><label class="text-[11px] opacity-60 ml-2">Email</label><input id="profile-email" type="email" disabled class="w-full mt-1 bg-[#08080A]/60 border border-[#D4B78F]/10 rounded-full px-4 py-2.5 text-sm opacity-70"></div>
+<div><label class="text-[11px] opacity-60 ml-2">País</label><input id="profile-country" type="text" placeholder="Ej: Uruguay, Argentina, España..." class="w-full mt-1 bg-[#08080A] border border-[#D4B78F]/15 rounded-full px-4 py-2.5 text-sm outline-none"></div>
+<div><label class="text-[11px] opacity-60 ml-2">Ciudad</label><input id="profile-city" type="text" placeholder="Tu ciudad" class="w-full mt-1 bg-[#08080A] border border-[#D4B78F]/15 rounded-full px-4 py-2.5 text-sm outline-none"></div>
+<div><label class="text-[11px] opacity-60 ml-2">Edad</label><input id="profile-age" type="number" min="18" max="120" placeholder="18+" class="w-full mt-1 bg-[#08080A] border border-[#D4B78F]/15 rounded-full px-4 py-2.5 text-sm outline-none"></div>
+<div><label class="text-[11px] opacity-60 ml-2">Género</label><select id="profile-gender" class="w-full mt-1 bg-[#08080A] border border-[#D4B78F]/15 rounded-full px-4 py-2.5 text-sm outline-none"><option value="">Seleccionar</option><option value="mujer">Mujer</option><option value="hombre">Hombre</option><option value="no-binario">No binario</option><option value="otro">Otro</option><option value="prefiero-no-decir">Prefiero no decir</option></select></div>
+</div>
+<div><label class="text-[11px] opacity-60 ml-2">Busco</label><select id="profile-looking" class="w-full mt-1 bg-[#08080A] border border-[#D4B78F]/15 rounded-full px-4 py-2.5 text-sm outline-none"><option value="">Seleccionar</option><option value="amistad">Amistad</option><option value="citas">Citas</option><option value="relacion">Relación</option><option value="conocer-gente">Conocer gente</option></select></div>
+<div><label class="text-[11px] opacity-60 ml-2">Sobre mí</label><textarea id="profile-bio" maxlength="500" rows="3" placeholder="Contá algo sobre vos..." class="w-full mt-1 bg-[#08080A] border border-[#D4B78F]/15 rounded-2xl px-4 py-3 text-sm outline-none resize-none"></textarea></div>
+<div><label class="text-[11px] opacity-60 ml-2">URL de foto</label><input id="profile-photo" type="url" placeholder="https://..." class="w-full mt-1 bg-[#08080A] border border-[#D4B78F]/15 rounded-full px-4 py-2.5 text-sm outline-none"><div class="text-[10px] opacity-40 mt-1 ml-2">Luego conectaremos la carga directa de fotos.</div></div>
+<button id="profile-save-btn" class="w-full bg-[#D4B78F] text-black rounded-full py-3 font-bold text-sm">Guardar mi perfil</button>
+</form>
+</div>
+</div>
+
 <!-- CHECKOUT COMPLETO CON PAYPAL -->
 <div id="modal-checkout" class="hidden fixed inset-0 z-[60] bg-black/80 flex items-center justify-center p-4">
 <div class="bg-[#111113] border border-[#D4B78F]/30 rounded-[24px] p-6 w-full max-w-[460px] max-h-[90vh] overflow-y-auto">
@@ -223,13 +245,55 @@ function init(){
 function renderAuth(){
  const area = document.getElementById('auth-area');
  if(currentUser){
-   area.innerHTML = `<div class="flex items-center gap-2"><div class="w-8 h-8 rounded-full bg-[#D4B78F] text-black flex items-center justify-center font-bold text-xs">${currentUser.name[0]}</div><div class="text-xs"><div class="font-semibold">${currentUser.name}</div><div class="opacity-60 text-[10px]">Online</div></div><button onclick="logout()" class="text-[11px] opacity-60 ml-2">Salir</button></div>`;
+   area.innerHTML = `<div class="flex items-center gap-2"><button onclick="openProfile()" class="flex items-center gap-2 hover:opacity-80" title="Abrir Mi perfil"><div class="w-8 h-8 rounded-full bg-[#D4B78F] text-black flex items-center justify-center font-bold text-xs overflow-hidden">${currentUser.photo ? `<img src="${currentUser.photo}" class="w-full h-full object-cover">` : currentUser.name[0]}</div><div class="text-xs text-left"><div class="font-semibold">${currentUser.name}</div><div class="opacity-60 text-[10px]">Mi perfil • Online</div></div></button><button onclick="openProfile()" class="hidden sm:block text-[11px] px-3 py-1.5 rounded-full border border-[#D4B78F]/20 hover:bg-[#D4B78F] hover:text-black">Mi perfil</button><button onclick="logout()" class="text-[11px] opacity-60 ml-1">Salir</button></div>`;
  } else {
    area.innerHTML = `<button onclick="openModal('login')" class="px-4 py-2 text-sm" style="color:#D4B78F">Entrar</button><button onclick="openModal('register')" class="px-4 py-2 rounded-full bg-[#D4B78F] text-black text-sm font-semibold">Crear cuenta</button>`;
  }
 }
 function openModal(t){closeModals(); document.getElementById('modal-'+t).classList.remove('hidden');}
 function closeModals(){document.getElementById('modal-login').classList.add('hidden'); document.getElementById('modal-register').classList.add('hidden');}
+function closeProfile(){document.getElementById('modal-profile').classList.add('hidden');}
+async function openProfile(){
+ if(!currentUser){openModal('login'); return;}
+ const modal=document.getElementById('modal-profile');
+ modal.classList.remove('hidden');
+ document.getElementById('profile-name').value=currentUser.name||'';
+ document.getElementById('profile-email').value=currentUser.email||'';
+ document.getElementById('profile-city').value=currentUser.city||'';
+ try{
+   const res=await fetch('/api?action=profile&email='+encodeURIComponent(currentUser.email));
+   const data=await res.json();
+   if(res.ok && data.ok && data.user){
+     const u=data.user;
+     document.getElementById('profile-name').value=u.nombre||currentUser.name||'';
+     document.getElementById('profile-email').value=u.email||currentUser.email||'';
+     document.getElementById('profile-country').value=u.pais||'';
+     document.getElementById('profile-city').value=u.ciudad||'';
+     document.getElementById('profile-age').value=u.edad||'';
+     document.getElementById('profile-gender').value=u.genero||'';
+     document.getElementById('profile-looking').value=u.busca||'';
+     document.getElementById('profile-bio').value=u.bio||'';
+     document.getElementById('profile-photo').value=u.foto_url||'';
+   }
+ }catch(err){showToast('No se pudo cargar el perfil');}
+}
+async function saveProfile(e){
+ e.preventDefault();
+ if(!currentUser) return;
+ const btn=document.getElementById('profile-save-btn');
+ btn.disabled=true; btn.innerText='Guardando...';
+ const payload={email:currentUser.email,pais:document.getElementById('profile-country').value.trim(),ciudad:document.getElementById('profile-city').value.trim(),edad:document.getElementById('profile-age').value?Number(document.getElementById('profile-age').value):null,genero:document.getElementById('profile-gender').value,busca:document.getElementById('profile-looking').value,bio:document.getElementById('profile-bio').value.trim(),foto_url:document.getElementById('profile-photo').value.trim()};
+ try{
+   const res=await fetch('/api?action=profile',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+   const data=await res.json();
+   if(!res.ok || !data.ok){showToast(data.error||'No se pudo guardar el perfil'); return;}
+   currentUser.city=payload.ciudad; currentUser.country=payload.pais; currentUser.photo=payload.foto_url;
+   localStorage.setItem('velo_current_real',JSON.stringify(currentUser));
+   renderAuth(); closeProfile(); showToast('✅ Perfil guardado');
+ }catch(err){showToast('Error de conexión al guardar');}
+ finally{btn.disabled=false; btn.innerText='Guardar mi perfil';}
+}
+
 async function handleLogin(e){
  e.preventDefault();
 
