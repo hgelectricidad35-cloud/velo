@@ -76,7 +76,7 @@ body{font-family:'Inter',sans-serif;background:#08080A;color:#E8DCC6}
 <button onclick="setGlobal(true)" id="btn-global" class="px-3 py-1.5 rounded-full bg-[#D4B78F] text-black text-xs font-semibold">Todas (Global)</button>
 <button onclick="setGlobal(false)" id="btn-uy" class="px-3 py-1.5 rounded-full border border-[#D4B78F]/20 text-xs">UY Uruguay</button>
 </div>
-<div class="mt-4"><div class="text-[11px] opacity-60 mb-1">Edad: <span id="age-label">18 - 40</span></div><input type="range" min="18" max="65" value="40" id="age-range" oninput="updateAge()" class="w-full accent-[#D4B78F]"></div>
+<div class="mt-4"><div class="text-[11px] opacity-60 mb-1">Edad: <span id="age-label">18 - 65</span></div><input type="range" min="18" max="65" value="40" id="age-range" oninput="updateAge()" class="w-full accent-[#D4B78F]"></div>
 <div class="text-[11px] opacity-40 mt-3">Ahora soporta: Maldonado, Punta del Este, Rocha, Colonia, Salto, Paysandú, Rivera, Canelones, San José, Tacuarembó, Cerro Largo, Rio Branco y cualquier ciudad del mundo que se registre.</div>
 </div>
 
@@ -434,9 +434,14 @@ async function loadPeople(){
      gender:u.genero||'',
      looking:u.busca||'',
      bio:u.bio||'Usuario de VeloApp',
-     img:u.foto_url||demoProfiles[0].img
+     img:(u.foto_url && /\.(jpg|jpeg|png|webp|gif)(\?.*)?$/i.test(u.foto_url)) ? u.foto_url : demoProfiles[0].img
    }));
    applyPeopleFilters(false);
+   if(peopleProfiles.length){
+     currentIdx=0;
+     renderCard();
+     renderStack();
+   }
    showToast('🌎 '+peopleProfiles.length+' perfil'+(peopleProfiles.length===1?'':'es')+' real'+(peopleProfiles.length===1?'':'es')+' cargado'+(peopleProfiles.length===1?'':'s'));
  }catch(err){
    console.error(err);
@@ -464,6 +469,9 @@ function applyPeopleFilters(showMessage=true){
    renderCard(); renderStack();
    if(showMessage) showToast('🔎 '+filteredPeopleProfiles.length+' perfil'+(filteredPeopleProfiles.length===1?'':'es')+' encontrado'+(filteredPeopleProfiles.length===1?'':'s'));
  }else if(peopleProfiles.length){
+   document.getElementById('card-name').innerText='Sin resultados';
+   document.getElementById('card-city').innerText='Probá otra ciudad, país o rango de edad';
+   document.getElementById('card-bio').innerText='La búsqueda está funcionando, pero no hay perfiles que coincidan con este filtro.';
    if(showMessage) showToast('🔎 No hay perfiles con ese filtro todavía');
  }
 }
@@ -471,7 +479,7 @@ function applyPeopleFilters(showMessage=true){
 function switchTab(t){
  document.querySelectorAll('[id^=tab-]').forEach(b=>{b.classList.remove('bg-[#D4B78F]','text-black'); b.style.color='#D4B78F';});
  const active = document.getElementById('tab-'+t); if(active){active.classList.add('bg-[#D4B78F]','text-black'); active.style.color='black';}
- if(t==='cerca') loadPeople();
+ if(t==='cerca'){ document.getElementById('filter-city')?.focus(); loadPeople(); }
 }
 function setCity(c){
  document.getElementById('filter-city').value=c;
