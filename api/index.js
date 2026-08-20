@@ -105,6 +105,7 @@ async function registerUser(req, res) {
     const nombre = String(body.nombre || '').trim();
     const email = String(body.email || '').trim().toLowerCase();
     const ciudad = String(body.ciudad || '').trim();
+    const pais = String(body.pais || '').trim();
     const password = String(body.password || '');
 
     if (!nombre || !email || !ciudad || !password) {
@@ -127,24 +128,23 @@ async function registerUser(req, res) {
     }
 
     const result = await pool.query(
-      `INSERT INTO usuarios (nombre, email, password, membresia)
-       VALUES ($1, $2, $3, $4)
-       RETURNING id, nombre, email, membresia`,
-      [nombre, email, password, 'free']
+      `INSERT INTO usuarios
+        (nombre, email, password, membresia, pais, ciudad, actualizado_en)
+       VALUES
+        ($1, $2, $3, $4, $5, $6, NOW())
+       RETURNING
+        id, nombre, email, membresia, pais, ciudad, edad, genero, busca,
+        bio, foto_url, latitud, longitud, actualizado_en`,
+      [nombre, email, password, 'free', pais || null, ciudad]
     );
 
     return res.status(201).json({
       ok: true,
-      user: {
-        id: result.rows[0].id,
-        nombre: result.rows[0].nombre,
-        email: result.rows[0].email,
-        ciudad,
-        membresia: result.rows[0].membresia
-      }
+      user: result.rows[0]
     });
   } catch (e) {
     console.error('VELOAPP REGISTER API ERROR:', e);
+
     return res.status(500).json({
       ok: false,
       error: 'No se pudo crear la cuenta: ' + e.message
@@ -173,7 +173,9 @@ async function loginUser(req, res) {
     }
 
     const result = await pool.query(
-      `SELECT id, nombre, email, membresia
+      `SELECT
+        id, nombre, email, membresia, pais, ciudad, edad, genero, busca,
+        bio, foto_url, latitud, longitud, actualizado_en
        FROM usuarios
        WHERE LOWER(email)=LOWER($1)
        AND password=$2
@@ -194,9 +196,136 @@ async function loginUser(req, res) {
     });
   } catch (e) {
     console.error('VELOAPP LOGIN API ERROR:', e);
+
     return res.status(500).json({
       ok: false,
       error: 'No se pudo iniciar sesión: ' + e.message
+    });
+  }
+}
+
+async function getProfile(req, res) {
+  try {
+    const email = String(req.query?.email || '').trim().toLowerCase();
+
+    if (!email) {
+      return res.status(400).json({ ok: false, error: 'Falta el email del usuario.' });
+    }
+
+    const result = await pool.query(
+      `SELECT
+        id, nombre, email, membresia, pais, ciudad, edad, genero, busca,
+        bio, foto_url, latitud, longitud, actualizado_en
+       FROM usuarios
+       WHERE LOWER(email)=LOWER($1)
+       LIMIT 1`,
+      [email]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ ok: false, error: 'Usuario no encontrado.' });
+    }
+
+    return res.status(200).json({ ok: true, user: result.rows[0] });
+  } catch (e) {
+    console.error('VELOAPP GET PROFILE ERROR:', e);
+    return res.status(500).json({
+      ok: false,
+      error: 'No se pudo cargar el perfil: ' + e.message
+    });
+  }
+}
+
+async function updateProfile(req, res) {
+  try {
+    const body = getBody(req);
+    const email = String(body.email || '').trim().toLowerCase();
+
+    if (!email) {
+      return res.status(400).json({ ok: false, error: 'Falta el email del usuario.' });
+    }
+
+    const nombre = String(body.nombre || '').trim();
+    const pais = String(body.pais || '').trim();
+    const ciudad = String(body.ciudad || '').trim();
+    const genero = String(body.genero || '').trim();
+    const busca = String(body.busca || '').trim();
+    const bio = String(body.bio || '').trim();
+    const foto_url = String(body.foto_url || '').trim();
+
+    const edad =
+      body.edad === '' || body.edad === null || body.edad === undefined
+        ? null
+        : Number(body.edad);
+
+    const latitud =
+      body.latitud === '' || body.latitud === null || body.latitud === undefined
+        ? null
+        : Number(body.latitud);
+
+    const longitud =
+      body.longitud === '' || body.longitud === null || body.longitud === undefined
+        ? null
+        : Number(body.longitud);
+
+    if (edad !== null && (!Number.isFinite(edad) || edad < 18 || edad > 120)) {
+      return res.status(400).json({
+        ok: false,
+        error: 'La edad debe estar entre 18 y 120.'
+      });
+    }
+
+    if (latitud !== null && (!Number.isFinite(latitud) || latitud < -90 || latitud > 90)) {
+      return res.status(400).json({ ok: false, error: 'Latitud inválida.' });
+    }
+
+    if (longitud !== null && (!Number.isFinite(longitud) || longitud < -180 || longitud > 180)) {
+      return res.status(400).json({ ok: false, error: 'Longitud inválida.' });
+    }
+
+    const result = await pool.query(
+      `UPDATE usuarios
+       SET
+         nombre = COALESCE(NULLIF($2, ''), nombre),
+         pais = NULLIF($3, ''),
+         ciudad = NULLIF($4, ''),
+         edad = $5,
+         genero = NULLIF($6, ''),
+         busca = NULLIF($7, ''),
+         bio = NULLIF($8, ''),
+         foto_url = NULLIF($9, ''),
+         latitud = $10,
+         longitud = $11,
+         actualizado_en = NOW()
+       WHERE LOWER(email)=LOWER($1)
+       RETURNING
+         id, nombre, email, membresia, pais, ciudad, edad, genero, busca,
+         bio, foto_url, latitud, longitud, actualizado_en`,
+      [
+        email,
+        nombre,
+        pais,
+        ciudad,
+        edad,
+        genero,
+        busca,
+        bio,
+        foto_url,
+        latitud,
+        longitud
+      ]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ ok: false, error: 'Usuario no encontrado.' });
+    }
+
+    return res.status(200).json({ ok: true, user: result.rows[0] });
+  } catch (e) {
+    console.error('VELOAPP UPDATE PROFILE ERROR:', e);
+    return res.status(500).json({
+      ok: false,
+      error: 'No se pudo guardar el perfil: ' + e.message
     });
   }
 }
@@ -302,6 +431,25 @@ export default async function handler(req, res) {
     }
 
     return loginUser(req, res);
+  }
+
+
+  // Perfil real guardado en Neon.
+  // GET  /api?action=profile&email=...
+  // POST /api?action=profile
+  if (action === 'profile') {
+    if (req.method === 'GET') {
+      return getProfile(req, res);
+    }
+
+    if (req.method === 'POST') {
+      return updateProfile(req, res);
+    }
+
+    return res.status(405).json({
+      ok: false,
+      error: 'Método no permitido'
+    });
   }
 
   // El logout de la portada es visual/local por ahora.
