@@ -1002,6 +1002,742 @@ async function searchPeople(req, res) {
 
 
 
+
+// ======================================================
+// PAYPAL SUBSCRIPTIONS - VELOAPP LIVE
+// ======================================================
+
+const PAYPAL_API_BASE = 'https://api-m.paypal.com';
+
+const VELO_PAYPAL_PLANS = {
+  gold_monthly: {
+    tier: 'gold',
+    period: 'monthly',
+    name: 'Velo Gold Mensual',
+    price: '9.99',
+    intervalUnit: 'MONTH'
+  },
+  gold_yearly: {
+    tier: 'gold',
+    period: 'yearly',
+    name: 'Velo Gold Anual',
+    price: '79.99',
+    intervalUnit: 'YEAR'
+  },
+  platinum_monthly: {
+    tier: 'platinum',
+    period: 'monthly',
+    name: 'Velo Platinum Mensual',
+    price: '19.99',
+    intervalUnit: 'MONTH'
+  },
+  platinum_yearly: {
+    tier: 'platinum',
+    period: 'yearly',
+    name: 'Velo Platinum Anual',
+    price: '149.99',
+    intervalUnit: 'YEAR'
+  }
+};
+
+function paypalCredentialsReady() {
+  return Boolean(
+    process.env.PAYPAL_CLIENT_ID &&
+    process.env.PAYPAL_CLIENT_SECRET
+  );
+}
+
+async function getPayPalAccessToken() {
+  if (!paypalCredentialsReady()) {
+    throw new Error('PAYPAL_CLIENT_ID o PAYPAL_CLIENT_SECRET no configurados en Vercel');
+  }
+
+  const basic = Buffer.from(
+    `${process.env.PAYPAL_CLIENT_ID}:${process.env.PAYPAL_CLIENT_SECRET}`
+  ).toString('base64');
+
+  const response = await fetch(`${PAYPAL_API_BASE}/v1/oauth2/token`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Basic ${basic}`,
+      'Content-Type': 'application/x-www-form-urlencoded'
+    },
+    body: 'grant_type=client_credentials'
+  });
+
+  const data = await response.json();
+
+  if (!response.ok || !data.access_token) {
+    throw new Error(
+      `PayPal OAuth falló: ${data.error_description || data.error || response.status}`
+    );
+  }
+
+  return data.access_token;
+}
+
+async function paypalFetch(path, options = {}) {
+  const accessToken = await getPayPalAccessToken();
+
+  const response = await fetch(`${PAYPAL_API_BASE}${path}`, {
+    ...options,
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      ...(options.headers || {})
+    }
+  });
+
+  let data = {};
+  try {
+    data = await response.json();
+  } catch {
+    data = {};
+  }
+
+  if (!response.ok) {
+    const detail =
+      data?.details?.[0]?.description ||
+      data?.message ||
+      data?.name ||
+      `HTTP ${response.status}`;
+    throw new Error(`PayPal API: ${detail}`);
+  }
+
+  return data;
+}
+
+async function ensurePayPalTables() {
+  if (!databaseUrl) {
+    throw new Error('Base de datos no configurada en Vercel');
+  }
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS paypal_config (
+      clave VARCHAR(80) PRIMARY KEY,
+      valor TEXT NOT NULL,
+      actualizado_en TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS suscripciones (
+      id BIGSERIAL PRIMARY KEY,
+      usuario_id BIGINT NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+      email VARCHAR(255) NOT NULL,
+      proveedor VARCHAR(30) NOT NULL DEFAULT 'paypal',
+      proveedor_subscription_id VARCHAR(120) UNIQUE NOT NULL,
+      plan_code VARCHAR(40) NOT NULL,
+      membresia VARCHAR(20) NOT NULL,
+      periodicidad VARCHAR(20) NOT NULL,
+      estado VARCHAR(40) NOT NULL,
+      proximo_cobro TIMESTAMPTZ,
+      creado_en TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      actualizado_en TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS paypal_eventos (
+      event_id VARCHAR(140) PRIMARY KEY,
+      event_type VARCHAR(100) NOT NULL,
+      recibido_en TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+}
+
+async function getPayPalConfig(key) {
+  await ensurePayPalTables();
+  const result = await pool.query(
+    'SELECT valor FROM paypal_config WHERE clave=$1 LIMIT 1',
+    [key]
+  );
+  return result.rows[0]?.valor || null;
+}
+
+async function setPayPalConfig(key, value) {
+  await ensurePayPalTables();
+  await pool.query(
+    `INSERT INTO paypal_config (clave, valor, actualizado_en)
+     VALUES ($1,$2,NOW())
+     ON CONFLICT (clave)
+     DO UPDATE SET valor=EXCLUDED.valor, actualizado_en=NOW()`,
+    [key, String(value)]
+  );
+}
+
+async function paypalSetupStatus(req, res) {
+  try {
+    await ensurePayPalTables();
+
+    const keys = [
+      'product_id',
+      'plan_gold_monthly',
+      'plan_gold_yearly',
+      'plan_platinum_monthly',
+      'plan_platinum_yearly',
+      'webhook_id'
+    ];
+
+    const result = await pool.query(
+      'SELECT clave, valor FROM paypal_config WHERE clave = ANY($1::text[])',
+      [keys]
+    );
+
+    const config = Object.fromEntries(
+      result.rows.map(row => [row.clave, row.valor])
+    );
+
+    return res.status(200).json({
+      ok: true,
+      credentials: paypalCredentialsReady(),
+      configured: keys.every(key => Boolean(config[key])),
+      config: {
+        product_id: config.product_id || null,
+        plans_ready: Boolean(
+          config.plan_gold_monthly &&
+          config.plan_gold_yearly &&
+          config.plan_platinum_monthly &&
+          config.plan_platinum_yearly
+        ),
+        webhook_ready: Boolean(config.webhook_id)
+      }
+    });
+  } catch (e) {
+    console.error('VELOAPP PAYPAL STATUS ERROR:', e);
+    return res.status(500).json({ ok: false, error: e.message });
+  }
+}
+
+async function createPayPalPlan(productId, planCode, planDef) {
+  const requestId = `velo-${planCode}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+  return paypalFetch('/v1/billing/plans', {
+    method: 'POST',
+    headers: {
+      'PayPal-Request-Id': requestId,
+      Prefer: 'return=representation'
+    },
+    body: JSON.stringify({
+      product_id: productId,
+      name: planDef.name,
+      description: `${planDef.name} - VeloApp.store`,
+      status: 'ACTIVE',
+      billing_cycles: [
+        {
+          frequency: {
+            interval_unit: planDef.intervalUnit,
+            interval_count: 1
+          },
+          tenure_type: 'REGULAR',
+          sequence: 1,
+          total_cycles: 0,
+          pricing_scheme: {
+            fixed_price: {
+              value: planDef.price,
+              currency_code: 'USD'
+            }
+          }
+        }
+      ],
+      payment_preferences: {
+        auto_bill_outstanding: true,
+        setup_fee: {
+          value: '0',
+          currency_code: 'USD'
+        },
+        setup_fee_failure_action: 'CONTINUE',
+        payment_failure_threshold: 3
+      },
+      taxes: {
+        percentage: '0',
+        inclusive: false
+      }
+    })
+  });
+}
+
+async function bootstrapPayPal(req, res) {
+  try {
+    const body = getBody(req);
+    const setupKey = String(body.setup_key || '');
+    const expectedSetupKey = String(process.env.PAYPAL_SETUP_KEY || '');
+
+    if (!expectedSetupKey) {
+      return res.status(500).json({
+        ok: false,
+        error: 'PAYPAL_SETUP_KEY no configurado en Vercel'
+      });
+    }
+
+    if (!setupKey || setupKey !== expectedSetupKey) {
+      return res.status(403).json({
+        ok: false,
+        error: 'Clave de configuración PayPal inválida'
+      });
+    }
+
+    if (!paypalCredentialsReady()) {
+      return res.status(500).json({
+        ok: false,
+        error: 'Faltan las credenciales LIVE de PayPal en Vercel'
+      });
+    }
+
+    await ensurePayPalTables();
+
+    // Esta acción solo crea lo que todavía no existe en paypal_config.
+    let productId = await getPayPalConfig('product_id');
+
+    if (!productId) {
+      const product = await paypalFetch('/v1/catalogs/products', {
+        method: 'POST',
+        headers: {
+          'PayPal-Request-Id': `velo-product-${Date.now()}`,
+          Prefer: 'return=representation'
+        },
+        body: JSON.stringify({
+          name: 'VeloApp Membership',
+          description: 'Membresías Gold y Platinum de VeloApp.store',
+          type: 'SERVICE',
+          category: 'SOFTWARE',
+          home_url: 'https://veloapp.store'
+        })
+      });
+
+      productId = product.id;
+      await setPayPalConfig('product_id', productId);
+    }
+
+    const createdPlans = {};
+
+    for (const [planCode, planDef] of Object.entries(VELO_PAYPAL_PLANS)) {
+      const configKey = `plan_${planCode}`;
+      let planId = await getPayPalConfig(configKey);
+
+      if (!planId) {
+        const plan = await createPayPalPlan(productId, planCode, planDef);
+        planId = plan.id;
+        await setPayPalConfig(configKey, planId);
+      }
+
+      createdPlans[planCode] = planId;
+    }
+
+    let webhookId = await getPayPalConfig('webhook_id');
+
+    if (!webhookId) {
+      const webhook = await paypalFetch('/v1/notifications/webhooks', {
+        method: 'POST',
+        body: JSON.stringify({
+          url: 'https://veloapp.store/api?action=paypal-webhook',
+          event_types: [
+            { name: 'BILLING.SUBSCRIPTION.ACTIVATED' },
+            { name: 'BILLING.SUBSCRIPTION.CANCELLED' },
+            { name: 'BILLING.SUBSCRIPTION.SUSPENDED' },
+            { name: 'BILLING.SUBSCRIPTION.EXPIRED' },
+            { name: 'BILLING.SUBSCRIPTION.PAYMENT.FAILED' },
+            { name: 'PAYMENT.SALE.COMPLETED' },
+            { name: 'PAYMENT.SALE.REFUNDED' },
+            { name: 'PAYMENT.SALE.REVERSED' }
+          ]
+        })
+      });
+
+      webhookId = webhook.id;
+      await setPayPalConfig('webhook_id', webhookId);
+    }
+
+    return res.status(200).json({
+      ok: true,
+      message: 'PayPal VeloApp configurado',
+      product_id: productId,
+      plans: createdPlans,
+      webhook_id: webhookId
+    });
+  } catch (e) {
+    console.error('VELOAPP PAYPAL BOOTSTRAP ERROR:', e);
+    return res.status(500).json({
+      ok: false,
+      error: 'No se pudo configurar PayPal: ' + e.message
+    });
+  }
+}
+
+async function createPayPalSubscription(req, res) {
+  try {
+    const body = getBody(req);
+    const email = String(body.email || '').trim().toLowerCase();
+    const planCode = String(body.plan_code || '').trim().toLowerCase();
+
+    if (!email || !VELO_PAYPAL_PLANS[planCode]) {
+      return res.status(400).json({
+        ok: false,
+        error: 'Falta email o el plan solicitado no es válido'
+      });
+    }
+
+    const userResult = await pool.query(
+      `SELECT id, nombre, email, membresia
+       FROM usuarios
+       WHERE LOWER(email)=LOWER($1)
+       LIMIT 1`,
+      [email]
+    );
+
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({
+        ok: false,
+        error: 'No existe una cuenta VeloApp con ese email'
+      });
+    }
+
+    const planId = await getPayPalConfig(`plan_${planCode}`);
+
+    if (!planId) {
+      return res.status(503).json({
+        ok: false,
+        error: 'Los planes PayPal todavía no fueron configurados'
+      });
+    }
+
+    const user = userResult.rows[0];
+    const customId = `velo:${user.id}:${planCode}`;
+
+    const subscription = await paypalFetch('/v1/billing/subscriptions', {
+      method: 'POST',
+      headers: {
+        'PayPal-Request-Id': `velo-sub-${user.id}-${planCode}-${Date.now()}`,
+        Prefer: 'return=representation'
+      },
+      body: JSON.stringify({
+        plan_id: planId,
+        custom_id: customId,
+        subscriber: {
+          email_address: email
+        },
+        application_context: {
+          brand_name: 'VeloApp',
+          locale: 'es-UY',
+          shipping_preference: 'NO_SHIPPING',
+          user_action: 'SUBSCRIBE_NOW',
+          return_url: 'https://veloapp.store/?paypal=success',
+          cancel_url: 'https://veloapp.store/?paypal=cancel'
+        }
+      })
+    });
+
+    const approveUrl = (subscription.links || []).find(
+      link => link.rel === 'approve'
+    )?.href;
+
+    if (!approveUrl) {
+      throw new Error('PayPal no devolvió el enlace de aprobación');
+    }
+
+    const def = VELO_PAYPAL_PLANS[planCode];
+
+    await ensurePayPalTables();
+    await pool.query(
+      `INSERT INTO suscripciones
+        (usuario_id, email, proveedor, proveedor_subscription_id, plan_code,
+         membresia, periodicidad, estado, proximo_cobro, actualizado_en)
+       VALUES ($1,$2,'paypal',$3,$4,$5,$6,$7,$8,NOW())
+       ON CONFLICT (proveedor_subscription_id)
+       DO UPDATE SET
+         estado=EXCLUDED.estado,
+         actualizado_en=NOW()`,
+      [
+        user.id,
+        email,
+        subscription.id,
+        planCode,
+        def.tier,
+        def.period,
+        subscription.status || 'APPROVAL_PENDING',
+        subscription.billing_info?.next_billing_time || null
+      ]
+    );
+
+    return res.status(201).json({
+      ok: true,
+      subscription_id: subscription.id,
+      status: subscription.status,
+      plan_code: planCode,
+      approve_url: approveUrl
+    });
+  } catch (e) {
+    console.error('VELOAPP PAYPAL CREATE SUBSCRIPTION ERROR:', e);
+    return res.status(500).json({
+      ok: false,
+      error: 'No se pudo iniciar la suscripción: ' + e.message
+    });
+  }
+}
+
+async function getPayPalSubscriptionDetails(subscriptionId) {
+  return paypalFetch(
+    `/v1/billing/subscriptions/${encodeURIComponent(subscriptionId)}`,
+    { method: 'GET' }
+  );
+}
+
+function parseVeloCustomId(customId) {
+  const value = String(customId || '');
+  const parts = value.split(':');
+
+  if (parts.length !== 3 || parts[0] !== 'velo') return null;
+
+  const userId = Number(parts[1]);
+  const planCode = parts[2];
+
+  if (!Number.isInteger(userId) || !VELO_PAYPAL_PLANS[planCode]) return null;
+
+  return { userId, planCode };
+}
+
+async function verifyPayPalWebhook(req, webhookEvent) {
+  const webhookId = await getPayPalConfig('webhook_id');
+  if (!webhookId) return false;
+
+  const payload = {
+    auth_algo: req.headers['paypal-auth-algo'],
+    cert_url: req.headers['paypal-cert-url'],
+    transmission_id: req.headers['paypal-transmission-id'],
+    transmission_sig: req.headers['paypal-transmission-sig'],
+    transmission_time: req.headers['paypal-transmission-time'],
+    webhook_id: webhookId,
+    webhook_event: webhookEvent
+  };
+
+  const result = await paypalFetch('/v1/notifications/verify-webhook-signature', {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  });
+
+  return result.verification_status === 'SUCCESS';
+}
+
+async function resolveSubscriptionFromWebhook(event) {
+  const resource = event?.resource || {};
+
+  let subscriptionId =
+    resource.id && String(resource.id).startsWith('I-')
+      ? resource.id
+      : null;
+
+  if (!subscriptionId) {
+    subscriptionId =
+      resource.billing_agreement_id ||
+      resource.supplementary_data?.related_ids?.subscription_id ||
+      null;
+  }
+
+  if (!subscriptionId) return null;
+
+  const details = await getPayPalSubscriptionDetails(subscriptionId);
+  const parsed = parseVeloCustomId(details.custom_id);
+
+  if (!parsed) return null;
+
+  return {
+    subscriptionId,
+    details,
+    ...parsed
+  };
+}
+
+async function syncMembershipFromPayPalEvent(event) {
+  const resolved = await resolveSubscriptionFromWebhook(event);
+  if (!resolved) return { ignored: true, reason: 'Sin referencia VeloApp' };
+
+  const { subscriptionId, details, userId, planCode } = resolved;
+  const def = VELO_PAYPAL_PLANS[planCode];
+  const eventType = String(event.event_type || '');
+  const status = String(details.status || '').toUpperCase();
+
+  const activate =
+    eventType === 'BILLING.SUBSCRIPTION.ACTIVATED' ||
+    eventType === 'PAYMENT.SALE.COMPLETED' ||
+    status === 'ACTIVE';
+
+  const deactivate = [
+    'BILLING.SUBSCRIPTION.CANCELLED',
+    'BILLING.SUBSCRIPTION.SUSPENDED',
+    'BILLING.SUBSCRIPTION.EXPIRED'
+  ].includes(eventType) || ['CANCELLED', 'SUSPENDED', 'EXPIRED'].includes(status);
+
+  await ensurePayPalTables();
+
+  const userResult = await pool.query(
+    'SELECT id, email FROM usuarios WHERE id=$1 LIMIT 1',
+    [userId]
+  );
+
+  if (userResult.rows.length === 0) {
+    return { ignored: true, reason: 'Usuario VeloApp inexistente' };
+  }
+
+  const userEmail = userResult.rows[0].email;
+
+  await pool.query(
+    `INSERT INTO suscripciones
+      (usuario_id, email, proveedor, proveedor_subscription_id, plan_code,
+       membresia, periodicidad, estado, proximo_cobro, actualizado_en)
+     VALUES ($1,$2,'paypal',$3,$4,$5,$6,$7,$8,NOW())
+     ON CONFLICT (proveedor_subscription_id)
+     DO UPDATE SET
+       plan_code=EXCLUDED.plan_code,
+       membresia=EXCLUDED.membresia,
+       periodicidad=EXCLUDED.periodicidad,
+       estado=EXCLUDED.estado,
+       proximo_cobro=EXCLUDED.proximo_cobro,
+       actualizado_en=NOW()`,
+    [
+      userId,
+      userEmail,
+      subscriptionId,
+      planCode,
+      def.tier,
+      def.period,
+      details.status || eventType,
+      details.billing_info?.next_billing_time || null
+    ]
+  );
+
+  if (activate && !deactivate) {
+    await pool.query(
+      `UPDATE usuarios
+       SET membresia=$2, actualizado_en=NOW()
+       WHERE id=$1`,
+      [userId, def.tier]
+    );
+  }
+
+  if (deactivate) {
+    await pool.query(
+      `UPDATE usuarios
+       SET membresia='free', actualizado_en=NOW()
+       WHERE id=$1`,
+      [userId]
+    );
+  }
+
+  if (eventType === 'PAYMENT.SALE.COMPLETED') {
+    const paymentId = String(event.resource?.id || event.id || '');
+    const amountValue = Number(event.resource?.amount?.total || 0);
+    const currency = String(event.resource?.amount?.currency || 'USD');
+
+    if (paymentId) {
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS pagos (
+          id BIGSERIAL PRIMARY KEY,
+          payment_id VARCHAR(120) UNIQUE NOT NULL,
+          usuario_id BIGINT NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+          email VARCHAR(255) NOT NULL,
+          plan VARCHAR(40) NOT NULL,
+          monto NUMERIC(12,2) NOT NULL,
+          moneda VARCHAR(10),
+          estado VARCHAR(30) NOT NULL,
+          proveedor VARCHAR(30) NOT NULL,
+          creado_en TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `);
+
+      await pool.query(
+        `INSERT INTO pagos
+          (payment_id, usuario_id, email, plan, monto, moneda, estado, proveedor)
+         VALUES ($1,$2,$3,$4,$5,$6,'completed','paypal')
+         ON CONFLICT (payment_id) DO NOTHING`,
+        [paymentId, userId, userEmail, planCode, amountValue, currency]
+      );
+    }
+  }
+
+  return {
+    ignored: false,
+    user_id: userId,
+    membership: deactivate ? 'free' : def.tier,
+    subscription_id: subscriptionId,
+    status: details.status
+  };
+}
+
+async function paypalWebhook(req, res) {
+  try {
+    const event = getBody(req);
+
+    if (!event?.id || !event?.event_type) {
+      return res.status(400).json({ ok: false, error: 'Webhook PayPal inválido' });
+    }
+
+    const verified = await verifyPayPalWebhook(req, event);
+
+    if (!verified) {
+      console.warn('VELOAPP PAYPAL WEBHOOK FIRMA INVALIDA:', event.id);
+      return res.status(400).json({ ok: false, error: 'Firma PayPal inválida' });
+    }
+
+    await ensurePayPalTables();
+
+    const duplicate = await pool.query(
+      'SELECT event_id FROM paypal_eventos WHERE event_id=$1 LIMIT 1',
+      [event.id]
+    );
+
+    if (duplicate.rows.length > 0) {
+      return res.status(200).json({ ok: true, duplicate: true });
+    }
+
+    const result = await syncMembershipFromPayPalEvent(event);
+
+    await pool.query(
+      `INSERT INTO paypal_eventos (event_id, event_type, recibido_en)
+       VALUES ($1,$2,NOW())
+       ON CONFLICT (event_id) DO NOTHING`,
+      [event.id, event.event_type]
+    );
+
+    console.log('VELOAPP PAYPAL WEBHOOK OK:', event.event_type, event.id, result);
+
+    return res.status(200).json({ ok: true, result });
+  } catch (e) {
+    console.error('VELOAPP PAYPAL WEBHOOK ERROR:', e);
+    return res.status(500).json({ ok: false, error: e.message });
+  }
+}
+
+async function paypalSubscriptionStatus(req, res) {
+  try {
+    const email = String(req.query?.email || '').trim().toLowerCase();
+
+    if (!email) {
+      return res.status(400).json({ ok: false, error: 'Falta email' });
+    }
+
+    await ensurePayPalTables();
+
+    const result = await pool.query(
+      `SELECT plan_code, membresia, periodicidad, estado,
+              proveedor_subscription_id, proximo_cobro, actualizado_en
+       FROM suscripciones
+       WHERE LOWER(email)=LOWER($1) AND proveedor='paypal'
+       ORDER BY actualizado_en DESC
+       LIMIT 1`,
+      [email]
+    );
+
+    return res.status(200).json({
+      ok: true,
+      subscription: result.rows[0] || null
+    });
+  } catch (e) {
+    console.error('VELOAPP PAYPAL SUBSCRIPTION STATUS ERROR:', e);
+    return res.status(500).json({ ok: false, error: e.message });
+  }
+}
+
 async function verifyPayment(req, res) {
 
   if (!databaseUrl) {
@@ -1609,6 +2345,66 @@ export default async function handler(req, res) {
 
   }
 
+
+
+  /*
+    PAYPAL - ESTADO DE CONFIGURACIÓN
+  */
+
+  if (action === 'paypal-setup-status') {
+    if (req.method !== 'GET') {
+      return res.status(405).json({ ok: false, error: 'Método no permitido' });
+    }
+    return paypalSetupStatus(req, res);
+  }
+
+
+  /*
+    PAYPAL - CREAR PRODUCTO, 4 PLANES Y WEBHOOK (UNA SOLA VEZ)
+  */
+
+  if (action === 'paypal-bootstrap') {
+    if (req.method !== 'POST') {
+      return res.status(405).json({ ok: false, error: 'Método no permitido' });
+    }
+    return bootstrapPayPal(req, res);
+  }
+
+
+  /*
+    PAYPAL - INICIAR SUSCRIPCIÓN DEL USUARIO
+  */
+
+  if (action === 'paypal-create-subscription') {
+    if (req.method !== 'POST') {
+      return res.status(405).json({ ok: false, error: 'Método no permitido' });
+    }
+    return createPayPalSubscription(req, res);
+  }
+
+
+  /*
+    PAYPAL - WEBHOOK AUTOMÁTICO
+  */
+
+  if (action === 'paypal-webhook') {
+    if (req.method !== 'POST') {
+      return res.status(405).json({ ok: false, error: 'Método no permitido' });
+    }
+    return paypalWebhook(req, res);
+  }
+
+
+  /*
+    PAYPAL - CONSULTAR SUSCRIPCIÓN ACTUAL
+  */
+
+  if (action === 'paypal-subscription-status') {
+    if (req.method !== 'GET') {
+      return res.status(405).json({ ok: false, error: 'Método no permitido' });
+    }
+    return paypalSubscriptionStatus(req, res);
+  }
 
   /*
     LOGOUT
