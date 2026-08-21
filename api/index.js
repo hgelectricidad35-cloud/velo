@@ -1,4 +1,5 @@
 import { Pool } from 'pg';
+import { createHash } from 'crypto';
 
 const databaseUrl =
   process.env.VELOAPP_DB_DATABASE_URL ||
@@ -703,7 +704,10 @@ async function updateProfile(req, res) {
           NULLIF($8, ''),
 
         foto_url =
-          NULLIF($9, ''),
+          COALESCE(
+            NULLIF($9, ''),
+            foto_url
+          ),
 
         latitud = $10,
 
@@ -1476,7 +1480,8 @@ async function createPayPalSubscription(req, res) {
   }
 }
 
-async function getPayPalSubscriptionDetails(subscriptionId) {
+async
+function getPayPalSubscriptionDetails(subscriptionId) {
   return paypalFetch(
     `/v1/billing/subscriptions/${encodeURIComponent(subscriptionId)}`,
     { method: 'GET' }
@@ -2210,6 +2215,396 @@ async function verifyPayment(req, res) {
 
 
 
+
+// ======================================================
+// FOTOS DE PERFIL - CLOUDINARY + NEON
+// Hasta 6 fotos por usuario, una marcada como principal.
+// ======================================================
+
+function cloudinaryReady() {
+  return Boolean(
+    process.env.CLOUDINARY_CLOUD_NAME &&
+    process.env.CLOUDINARY_API_KEY &&
+    process.env.CLOUDINARY_API_SECRET
+  );
+}
+
+async function ensureProfilePhotosTable() {
+  if (!databaseUrl) {
+    throw new Error('Base de datos no configurada en Vercel');
+  }
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS fotos_perfil (
+      id BIGSERIAL PRIMARY KEY,
+      usuario_id BIGINT NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+      url_foto TEXT NOT NULL,
+      public_id TEXT NOT NULL,
+      es_principal BOOLEAN NOT NULL DEFAULT FALSE,
+      creado_en TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_fotos_perfil_usuario
+    ON fotos_perfil(usuario_id, creado_en)
+  `);
+}
+
+async function getUserByEmail(email) {
+  const result = await pool.query(
+    `SELECT id, email, foto_url
+     FROM usuarios
+     WHERE LOWER(email)=LOWER($1)
+     LIMIT 1`,
+    [email]
+  );
+  return result.rows[0] || null;
+}
+
+async function listProfilePhotosForUser(userId) {
+  await ensureProfilePhotosTable();
+  const result = await pool.query(
+    `SELECT id, url_foto, es_principal, creado_en
+     FROM fotos_perfil
+     WHERE usuario_id=$1
+     ORDER BY es_principal DESC, creado_en ASC, id ASC`,
+    [userId]
+  );
+  return result.rows;
+}
+
+async function cloudinaryUploadDataUrl(dataUrl, userId) {
+  if (!cloudinaryReady()) {
+    throw new Error(
+      'Cloudinary no está configurado en Vercel. Faltan CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY o CLOUDINARY_API_SECRET.'
+    );
+  }
+
+  const timestamp = Math.floor(Date.now() / 1000);
+  const folder = 'veloapp/perfiles';
+  const toSign = `folder=${folder}&timestamp=${timestamp}${process.env.CLOUDINARY_API_SECRET}`;
+  const signature = createHash('sha1').update(toSign).digest('hex');
+
+  const form = new FormData();
+  form.append('file', dataUrl);
+  form.append('api_key', process.env.CLOUDINARY_API_KEY);
+  form.append('timestamp', String(timestamp));
+  form.append('folder', folder);
+  form.append('signature', signature);
+
+  const response = await fetch(
+    `https://api.cloudinary.com/v1_1/${encodeURIComponent(process.env.CLOUDINARY_CLOUD_NAME)}/image/upload`,
+    { method: 'POST', body: form }
+  );
+
+  const data = await response.json();
+
+  if (!response.ok || !data.secure_url || !data.public_id) {
+    throw new Error(
+      'Cloudinary: ' +
+      (data?.error?.message || data?.message || `HTTP ${response.status}`)
+    );
+  }
+
+  return {
+    url: data.secure_url,
+    publicId: data.public_id,
+    width: data.width,
+    height: data.height
+  };
+}
+
+async function cloudinaryDeleteImage(publicId) {
+  if (!cloudinaryReady() || !publicId) return;
+
+  const timestamp = Math.floor(Date.now() / 1000);
+  const toSign = `public_id=${publicId}&timestamp=${timestamp}${process.env.CLOUDINARY_API_SECRET}`;
+  const signature = createHash('sha1').update(toSign).digest('hex');
+
+  const form = new FormData();
+  form.append('public_id', publicId);
+  form.append('api_key', process.env.CLOUDINARY_API_KEY);
+  form.append('timestamp', String(timestamp));
+  form.append('signature', signature);
+
+  try {
+    await fetch(
+      `https://api.cloudinary.com/v1_1/${encodeURIComponent(process.env.CLOUDINARY_CLOUD_NAME)}/image/destroy`,
+      { method: 'POST', body: form }
+    );
+  } catch (e) {
+    console.warn('VELOAPP CLOUDINARY DELETE WARNING:', e.message);
+  }
+}
+
+async function getProfilePhotos(req, res) {
+  try {
+    const email = String(req.query?.email || '').trim().toLowerCase();
+
+    if (!email) {
+      return res.status(400).json({ ok: false, error: 'Falta email' });
+    }
+
+    const user = await getUserByEmail(email);
+
+    if (!user) {
+      return res.status(404).json({ ok: false, error: 'Usuario no encontrado' });
+    }
+
+    const photos = await listProfilePhotosForUser(user.id);
+
+    return res.status(200).json({
+      ok: true,
+      max: 6,
+      count: photos.length,
+      photos
+    });
+  } catch (e) {
+    console.error('VELOAPP GET PHOTOS ERROR:', e);
+    return res.status(500).json({ ok: false, error: e.message });
+  }
+}
+
+async function uploadProfilePhoto(req, res) {
+  try {
+    const body = getBody(req);
+    const email = String(body.email || '').trim().toLowerCase();
+    const dataUrl = String(body.data_url || '');
+
+    if (!email || !dataUrl) {
+      return res.status(400).json({ ok: false, error: 'Falta email o imagen' });
+    }
+
+    if (!/^data:image\/(jpeg|jpg|png|webp);base64,/i.test(dataUrl)) {
+      return res.status(400).json({
+        ok: false,
+        error: 'Formato no permitido. Usá JPG, PNG o WEBP.'
+      });
+    }
+
+    // El frontend comprime antes de enviar. Este límite evita cargas enormes.
+    if (dataUrl.length > 3_000_000) {
+      return res.status(413).json({
+        ok: false,
+        error: 'La imagen es demasiado pesada. Elegí una foto menor.'
+      });
+    }
+
+    const user = await getUserByEmail(email);
+
+    if (!user) {
+      return res.status(404).json({ ok: false, error: 'Usuario no encontrado' });
+    }
+
+    await ensureProfilePhotosTable();
+
+    const countResult = await pool.query(
+      'SELECT COUNT(*)::int AS total FROM fotos_perfil WHERE usuario_id=$1',
+      [user.id]
+    );
+
+    const total = Number(countResult.rows[0]?.total || 0);
+
+    if (total >= 6) {
+      return res.status(400).json({
+        ok: false,
+        error: 'Máximo 6 fotos por perfil.'
+      });
+    }
+
+    const uploaded = await cloudinaryUploadDataUrl(dataUrl, user.id);
+    const makePrimary = total === 0;
+
+    const inserted = await pool.query(
+      `INSERT INTO fotos_perfil
+        (usuario_id, url_foto, public_id, es_principal)
+       VALUES ($1,$2,$3,$4)
+       RETURNING id, url_foto, es_principal, creado_en`,
+      [user.id, uploaded.url, uploaded.publicId, makePrimary]
+    );
+
+    if (makePrimary) {
+      await pool.query(
+        `UPDATE usuarios
+         SET foto_url=$2, actualizado_en=NOW()
+         WHERE id=$1`,
+        [user.id, uploaded.url]
+      );
+    }
+
+    const photos = await listProfilePhotosForUser(user.id);
+
+    return res.status(201).json({
+      ok: true,
+      photo: inserted.rows[0],
+      photos
+    });
+  } catch (e) {
+    console.error('VELOAPP UPLOAD PHOTO ERROR:', e);
+    return res.status(500).json({ ok: false, error: e.message });
+  }
+}
+
+async function setPrimaryProfilePhoto(req, res) {
+  const client = await pool.connect();
+
+  try {
+    const body = getBody(req);
+    const email = String(body.email || '').trim().toLowerCase();
+    const photoId = Number(body.photo_id);
+
+    if (!email || !Number.isInteger(photoId)) {
+      return res.status(400).json({ ok: false, error: 'Datos inválidos' });
+    }
+
+    const user = await getUserByEmail(email);
+
+    if (!user) {
+      return res.status(404).json({ ok: false, error: 'Usuario no encontrado' });
+    }
+
+    await ensureProfilePhotosTable();
+
+    const photo = await client.query(
+      `SELECT id, url_foto
+       FROM fotos_perfil
+       WHERE id=$1 AND usuario_id=$2
+       LIMIT 1`,
+      [photoId, user.id]
+    );
+
+    if (!photo.rows.length) {
+      return res.status(404).json({ ok: false, error: 'Foto no encontrada' });
+    }
+
+    await client.query('BEGIN');
+
+    await client.query(
+      'UPDATE fotos_perfil SET es_principal=FALSE WHERE usuario_id=$1',
+      [user.id]
+    );
+
+    await client.query(
+      'UPDATE fotos_perfil SET es_principal=TRUE WHERE id=$1 AND usuario_id=$2',
+      [photoId, user.id]
+    );
+
+    await client.query(
+      `UPDATE usuarios
+       SET foto_url=$2, actualizado_en=NOW()
+       WHERE id=$1`,
+      [user.id, photo.rows[0].url_foto]
+    );
+
+    await client.query('COMMIT');
+
+    const photos = await listProfilePhotosForUser(user.id);
+
+    return res.status(200).json({
+      ok: true,
+      principal: photo.rows[0].url_foto,
+      photos
+    });
+  } catch (e) {
+    try { await client.query('ROLLBACK'); } catch {}
+    console.error('VELOAPP PRIMARY PHOTO ERROR:', e);
+    return res.status(500).json({ ok: false, error: e.message });
+  } finally {
+    client.release();
+  }
+}
+
+async function deleteProfilePhoto(req, res) {
+  const client = await pool.connect();
+
+  try {
+    const body = getBody(req);
+    const email = String(body.email || '').trim().toLowerCase();
+    const photoId = Number(body.photo_id);
+
+    if (!email || !Number.isInteger(photoId)) {
+      return res.status(400).json({ ok: false, error: 'Datos inválidos' });
+    }
+
+    const user = await getUserByEmail(email);
+
+    if (!user) {
+      return res.status(404).json({ ok: false, error: 'Usuario no encontrado' });
+    }
+
+    await ensureProfilePhotosTable();
+
+    const photoResult = await client.query(
+      `SELECT id, url_foto, public_id, es_principal
+       FROM fotos_perfil
+       WHERE id=$1 AND usuario_id=$2
+       LIMIT 1`,
+      [photoId, user.id]
+    );
+
+    if (!photoResult.rows.length) {
+      return res.status(404).json({ ok: false, error: 'Foto no encontrada' });
+    }
+
+    const photo = photoResult.rows[0];
+
+    await client.query('BEGIN');
+
+    await client.query(
+      'DELETE FROM fotos_perfil WHERE id=$1 AND usuario_id=$2',
+      [photoId, user.id]
+    );
+
+    let newPrimary = null;
+
+    if (photo.es_principal) {
+      const next = await client.query(
+        `SELECT id, url_foto
+         FROM fotos_perfil
+         WHERE usuario_id=$1
+         ORDER BY creado_en ASC, id ASC
+         LIMIT 1`,
+        [user.id]
+      );
+
+      if (next.rows.length) {
+        newPrimary = next.rows[0];
+        await client.query(
+          'UPDATE fotos_perfil SET es_principal=TRUE WHERE id=$1',
+          [newPrimary.id]
+        );
+      }
+
+      await client.query(
+        `UPDATE usuarios
+         SET foto_url=$2, actualizado_en=NOW()
+         WHERE id=$1`,
+        [user.id, newPrimary?.url_foto || null]
+      );
+    }
+
+    await client.query('COMMIT');
+
+    await cloudinaryDeleteImage(photo.public_id);
+
+    const photos = await listProfilePhotosForUser(user.id);
+
+    return res.status(200).json({
+      ok: true,
+      principal: newPrimary?.url_foto || (photo.es_principal ? null : user.foto_url),
+      photos
+    });
+  } catch (e) {
+    try { await client.query('ROLLBACK'); } catch {}
+    console.error('VELOAPP DELETE PHOTO ERROR:', e);
+    return res.status(500).json({ ok: false, error: e.message });
+  } finally {
+    client.release();
+  }
+}
+
+
 export default async function handler(req, res) {
 
   const action =
@@ -2405,6 +2800,40 @@ export default async function handler(req, res) {
     }
     return paypalSubscriptionStatus(req, res);
   }
+
+
+  /*
+    FOTOS DE PERFIL
+  */
+
+  if (action === 'photos') {
+    if (req.method !== 'GET') {
+      return res.status(405).json({ ok: false, error: 'Método no permitido' });
+    }
+    return getProfilePhotos(req, res);
+  }
+
+  if (action === 'photo-upload') {
+    if (req.method !== 'POST') {
+      return res.status(405).json({ ok: false, error: 'Método no permitido' });
+    }
+    return uploadProfilePhoto(req, res);
+  }
+
+  if (action === 'photo-primary') {
+    if (req.method !== 'POST') {
+      return res.status(405).json({ ok: false, error: 'Método no permitido' });
+    }
+    return setPrimaryProfilePhoto(req, res);
+  }
+
+  if (action === 'photo-delete') {
+    if (req.method !== 'POST') {
+      return res.status(405).json({ ok: false, error: 'Método no permitido' });
+    }
+    return deleteProfilePhoto(req, res);
+  }
+
 
   /*
     LOGOUT
