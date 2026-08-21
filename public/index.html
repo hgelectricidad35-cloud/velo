@@ -87,7 +87,7 @@ body{font-family:'Inter',sans-serif;background:#08080A;color:#E8DCC6}
 </div>
 
 <div class="bg-[#111113] border border-[#D4B78F]/15 rounded-[20px] p-4">
-<div id="gold-status" class="text-xs">Sin Gold: 12 likes ocultos</div>
+<div id="gold-status" class="text-xs">Free activo — 15 likes por día</div>
 <button onclick="buyPremium('gold')" class="w-full mt-3 bg-[#D4B78F] text-black rounded-full py-2 text-sm font-bold">Comprar Velo Gold $49</button>
 </div>
 </div>
@@ -119,14 +119,17 @@ body{font-family:'Inter',sans-serif;background:#08080A;color:#E8DCC6}
 <div class="space-y-4" id="right-panel">
 <div class="bg-[#111113] border border-[#D4B78F]/15 rounded-[20px] p-5">
 <div class="serif text-lg font-bold" style="color:#D4B78F">Velo Gold 👑</div>
-<p class="text-[12px] opacity-70 mt-2">Desbloqueá los 12 likes, likes ilimitados, sin anuncios y más alcance.</p>
-<ul class="text-[12px] mt-3 space-y-1 opacity-80"><li>✓ Ver quién te dio like</li><li>✓ Likes ilimitados</li><li>✓ Sin anuncios</li></ul>
-<button onclick="buyPremium('gold')" class="w-full mt-4 bg-[#D4B78F] text-black rounded-full py-2.5 font-bold text-sm">Activar Gold - $49 / $1990</button>
+<p class="text-[12px] opacity-70 mt-2">Más libertad para conocer gente y destacar tu perfil.</p>
+<ul class="text-[12px] mt-3 space-y-1 opacity-80"><li>✓ 100 likes por día</li><li>✓ Ver quién te dio like</li><li>✓ Filtros avanzados + sin anuncios</li><li>✓ 1 Boost de perfil por mes</li></ul>
+<div class="mt-3 text-[11px] opacity-60">Mensual <b>USD 9,99</b> • Anual <b>USD 79,99</b></div>
+<button onclick="buyPremium('gold')" class="w-full mt-4 bg-[#D4B78F] text-black rounded-full py-2.5 font-bold text-sm">Activar Gold — desde USD 9,99/mes</button>
 </div>
 <div class="bg-gradient-to-br from-[#D4B78F] to-[#8B6B47] rounded-[20px] p-5 text-black">
 <div class="serif text-lg font-bold">Velo Platinum 👑👑</div>
-<p class="text-[12px] mt-2 opacity-80">Todo Gold + SuperLikes ilimitados + Destacado + Eventos privados con Claudia.</p>
-<button onclick="buyPremium('platinum')" class="w-full mt-4 bg-black text-[#D4B78F] rounded-full py-2.5 font-bold text-sm">Activar Platinum - $89 / $3490</button>
+<p class="text-[12px] mt-2 opacity-80">La experiencia completa de VeloApp, con máxima visibilidad y control.</p>
+<ul class="text-[12px] mt-3 space-y-1 opacity-80"><li>✓ Likes ilimitados</li><li>✓ 4 Boosts de perfil por mes</li><li>✓ Modo incógnito</li><li>✓ Prioridad máxima + insignia Platinum</li></ul>
+<div class="mt-3 text-[11px] opacity-70">Mensual <b>USD 19,99</b> • Anual <b>USD 149,99</b></div>
+<button onclick="buyPremium('platinum')" class="w-full mt-4 bg-black text-[#D4B78F] rounded-full py-2.5 font-bold text-sm">Activar Platinum — desde USD 19,99/mes</button>
 </div>
 </div>
 </div>
@@ -194,42 +197,38 @@ body{font-family:'Inter',sans-serif;background:#08080A;color:#E8DCC6}
 </div>
 </div>
 
-<!-- CHECKOUT COMPLETO CON PAYPAL -->
+<!-- CHECKOUT VELOAPP - PAYPAL AUTOMÁTICO -->
 <div id="modal-checkout" class="hidden fixed inset-0 z-[60] bg-black/80 flex items-center justify-center p-4">
 <div class="bg-[#111113] border border-[#D4B78F]/30 rounded-[24px] p-6 w-full max-w-[460px] max-h-[90vh] overflow-y-auto">
-<div class="flex justify-between items-center mb-3"><div id="checkout-title" class="serif text-[18px] font-bold" style="color:#D4B78F">Comprar Velo Gold - $49 / $1990</div><button onclick="closeCheckout()" class="opacity-60">✕</button></div>
+<div class="flex justify-between items-center mb-3"><div id="checkout-title" class="serif text-[18px] font-bold" style="color:#D4B78F">Comprar Velo Gold</div><button onclick="closeCheckout()" class="opacity-60">✕</button></div>
 <div id="checkout-plan-info" class="bg-[#08080A] rounded-xl p-3 mb-4 border border-[#D4B78F]/10 text-sm"></div>
 
-<div class="space-y-3">
-<!-- MERCADO PAGO -->
-<button onclick="payWithMercadoPago()" class="w-full flex items-center justify-between bg-[#009EE3] text-white rounded-full px-5 py-3 font-semibold text-sm hover:opacity-90">
-<span>💳 Pagar con MercadoPago</span><span id="mp-price" class="bg-white text-[#009EE3] px-3 py-1 rounded-full text-xs">$1990 UYU</span>
-</button>
-
-<!-- PAYPAL - NUEVO INTEGRADO CON TU EMAIL -->
-<button onclick="payWithPayPal()" class="w-full flex items-center justify-between bg-[#FFC439] text-[#003087] rounded-full px-5 py-3 font-bold text-sm hover:opacity-90 border-2 border-[#003087]/20">
-<span>🅿️ Pagar con PayPal - Internacional</span><span id="paypal-price" class="bg-[#003087] text-white px-3 py-1 rounded-full text-xs">$49 USD</span>
-</button>
-<div class="text-[10px] opacity-60 text-center -mt-1">Cobro directo a: acevedo_construcciones@hotmail.com • Seguro • Activa al instante</div>
-
-<!-- STRIPE -->
-<button onclick="payWithStripe()" style="display:none" class="w-full flex items-center justify-between bg-white text-black rounded-full px-5 py-3 font-semibold text-sm hover:opacity-90">
-<span>💳 Pagar con Tarjeta (Stripe)</span><span id="stripe-price" class="bg-black text-white px-3 py-1 rounded-full text-xs">$49 USD</span>
-</button>
-
-<!-- WHATSAPP -->
-<button onclick="payWithWhatsapp()" style="display:none" class="w-full flex items-center justify-between bg-[#25D366] text-white rounded-full px-5 py-3 font-semibold text-sm">
-<span>💬 Pagar por WhatsApp con Claudia</span><span class="text-xs">Directo</span>
-</button>
+<div class="mb-4">
+<div class="text-[11px] opacity-60 mb-2">Elegí cómo querés pagar tu membresía</div>
+<div class="grid grid-cols-2 gap-2 bg-[#08080A] rounded-full p-1 border border-[#D4B78F]/10">
+<button id="billing-monthly" onclick="selectBillingPeriod('monthly')" class="rounded-full py-2 text-xs font-bold bg-[#D4B78F] text-black">Mensual</button>
+<button id="billing-yearly" onclick="selectBillingPeriod('yearly')" class="rounded-full py-2 text-xs font-bold opacity-70">Anual · Ahorrás</button>
 </div>
+</div>
+
+<div class="bg-[#08080A] rounded-[16px] border border-[#D4B78F]/10 p-4 mb-4">
+<div class="flex items-end justify-between gap-3">
+<div><div class="text-[11px] opacity-55">Total</div><div id="checkout-price" class="serif text-2xl font-bold" style="color:#D4B78F">USD 9,99</div></div>
+<div id="checkout-period-label" class="text-[11px] opacity-60 text-right">cada mes</div>
+</div>
+<div id="checkout-saving" class="hidden text-[10px] mt-2" style="color:#D4B78F">Precio anual de lanzamiento.</div>
+</div>
+
+<button id="paypal-subscribe-btn" onclick="payWithPayPal()" class="w-full flex items-center justify-between bg-[#FFC439] text-[#003087] rounded-full px-5 py-3 font-bold text-sm hover:opacity-90 border-2 border-[#003087]/20">
+<span>🅿️ Continuar con PayPal</span><span id="paypal-price" class="bg-[#003087] text-white px-3 py-1 rounded-full text-xs">USD 9,99</span>
+</button>
+
+<div class="text-[10px] opacity-55 text-center mt-3 leading-relaxed">Pago internacional en USD. PayPal gestiona la renovación de forma segura. Cuando PayPal confirme el pago, VeloApp activa tu membresía automáticamente.</div>
+<div class="text-[10px] opacity-40 text-center mt-2">Podés cancelar la renovación desde PayPal. No necesitás códigos ni activación manual.</div>
 
 <div class="mt-5 pt-4 border-t border-[#D4B78F]/10">
-<label class="text-[11px] opacity-60">Código de pago (si te dio Claudia)</label>
-<div class="flex gap-2 mt-1">
-<input id="payment-code" placeholder="Ej: VELO-GOLD-123" class="flex-1 bg-[#08080A] border border-[#D4B78F]/15 rounded-full px-4 py-2 text-xs outline-none">
-<button onclick="activateAfterPayment()" class="bg-[#D4B78F] text-black px-5 rounded-full text-xs font-bold">Activar ya</button>
-</div>
-<p class="text-[10px] opacity-40 mt-3">Al pagar con PayPal serás redirigido a PayPal.com. Pagás a acevedo_construcciones@hotmail.com y volvés automático. 7 días garantía. Soporte: acevedo_construcciones@hotmail.com</p>
+<div class="text-[11px] opacity-60">MercadoPago</div>
+<div class="text-[10px] opacity-40 mt-1">La opción local se mantendrá separada y se ajustará a la moneda correspondiente antes de habilitarla para estos nuevos planes.</div>
 </div>
 </div>
 </div>
@@ -252,6 +251,19 @@ let currentUser = JSON.parse(localStorage.getItem('velo_current_real')||'null');
 let currentIdx = 0;
 let premium = localStorage.getItem('velo_premium')==='true';
 let pendingPlan = 'gold';
+let pendingPeriod = 'monthly';
+const VELO_MEMBERSHIP_PLANS = {
+  gold: {
+    name: 'Velo Gold',
+    monthly: { code: 'gold_monthly', price: '9.99', display: 'USD 9,99', period: 'cada mes' },
+    yearly: { code: 'gold_yearly', price: '79.99', display: 'USD 79,99', period: 'cada año' }
+  },
+  platinum: {
+    name: 'Velo Platinum',
+    monthly: { code: 'platinum_monthly', price: '19.99', display: 'USD 19,99', period: 'cada mes' },
+    yearly: { code: 'platinum_yearly', price: '149.99', display: 'USD 149,99', period: 'cada año' }
+  }
+};
 
 function init(){
  renderAuth();
@@ -580,146 +592,163 @@ function updateAge(){
  applyPeopleFilters(false);
 }
 
+function getSelectedMembership(){
+  return VELO_MEMBERSHIP_PLANS[pendingPlan][pendingPeriod];
+}
+
+function refreshCheckout(){
+  const plan = VELO_MEMBERSHIP_PLANS[pendingPlan];
+  const selected = getSelectedMembership();
+  const isGold = pendingPlan === 'gold';
+
+  document.getElementById('checkout-title').innerText = 'Comprar ' + plan.name;
+  document.getElementById('checkout-plan-info').innerHTML = isGold
+    ? '<div class="text-xs font-bold" style="color:#D4B78F">Gold incluye</div><div class="text-[11px] mt-1 opacity-70">100 likes/día • Ver quién te dio Like • Filtros avanzados • Sin anuncios • 1 Boost/mes</div>'
+    : '<div class="text-xs font-bold" style="color:#D4B78F">Platinum incluye</div><div class="text-[11px] mt-1 opacity-70">Likes ilimitados • 4 Boosts/mes • Modo incógnito • Prioridad máxima • Insignia Platinum</div>';
+
+  document.getElementById('checkout-price').innerText = selected.display;
+  document.getElementById('paypal-price').innerText = selected.display;
+  document.getElementById('checkout-period-label').innerText = selected.period;
+  document.getElementById('checkout-saving').classList.toggle('hidden', pendingPeriod !== 'yearly');
+
+  const monthlyBtn = document.getElementById('billing-monthly');
+  const yearlyBtn = document.getElementById('billing-yearly');
+  monthlyBtn.className = pendingPeriod === 'monthly'
+    ? 'rounded-full py-2 text-xs font-bold bg-[#D4B78F] text-black'
+    : 'rounded-full py-2 text-xs font-bold opacity-70';
+  yearlyBtn.className = pendingPeriod === 'yearly'
+    ? 'rounded-full py-2 text-xs font-bold bg-[#D4B78F] text-black'
+    : 'rounded-full py-2 text-xs font-bold opacity-70';
+}
+
+function selectBillingPeriod(period){
+  pendingPeriod = period === 'yearly' ? 'yearly' : 'monthly';
+  refreshCheckout();
+}
+
 function openCheckout(plan){
-  pendingPlan = plan;
+  if(!currentUser || !currentUser.email){
+    showToast('Iniciá sesión para contratar una membresía');
+    openLogin();
+    return;
+  }
+  pendingPlan = plan === 'platinum' ? 'platinum' : 'gold';
+  pendingPeriod = 'monthly';
   closeModals();
-  const isGold = plan==='gold';
-  document.getElementById('checkout-title').innerText = isGold ? 'Comprar Velo Gold - $49 / $1990' : 'Comprar Velo Platinum - $89 / $3490';
-  document.getElementById('checkout-plan-info').innerHTML = isGold ? 
-    '<div class="flex justify-between"><span class="text-xs" style="color:#D4B78F">Gold incluye:</span><span class="text-xs font-bold" style="color:#D4B78F">Ver 12 likes + Ilimitado + Sin ads</span></div><div class="text-[11px] mt-1" style="color:#D4B78F88">7 días garantía • Activa al instante • PayPal: acevedo_construcciones@hotmail.com</div>' :
-    '<div class="flex justify-between"><span class="text-xs" style="color:#D4B78F">Platinum incluye:</span><span class="text-xs font-bold" style="color:#D4B78F">Todo Gold + SuperLikes + Destacado + Eventos Claudia</span></div><div class="text-[11px] mt-1" style="color:#D4B78F88">Más vendido • 7 días garantía • PayPal: acevedo_construcciones@hotmail.com</div>';
-  document.getElementById('mp-price').innerText = isGold ? '$1990 UYU' : '$3490 UYU';
-  document.getElementById('stripe-price').innerText = isGold ? '$49 USD' : '$89 USD';
-  document.getElementById('paypal-price').innerText = isGold ? '$49 USD' : '$89 USD';
+  refreshCheckout();
   document.getElementById('modal-checkout').classList.remove('hidden');
 }
-function closeCheckout(){document.getElementById('modal-checkout').classList.add('hidden');}
 
-function payWithMercadoPago(){
-  const isGold = pendingPlan==='gold';
-  const links = {
-    gold: localStorage.getItem('mp_link_gold') || 'https://mpago.la/2X7yhhQ',
-    platinum: localStorage.getItem('mp_link_platinum') || 'https://mpago.la/2t9um6C'
-  };
-  const priceUYU = isGold ? '1990' : '3490';
-  try{
-    fetch('https://formsubmit.co/ajax/4a8becaf83990535ff8cdec3c7c4e3d6',{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify({name:currentUser?.name||'Invitado',email:currentUser?.email||'sin-email',plan:pendingPlan,price:priceUYU+' UYU',method:'MercadoPago',_subject:`Intento de pago ${pendingPlan} - MercadoPago ${priceUYU} UYU`,message:`Usuario ${currentUser?.name} quiere pagar ${pendingPlan} por MP ${priceUYU} UYU`})});
-  }catch(e){}
-  if(links[pendingPlan].includes('PLACEHOLDER')){
-    showToast('⚙️ Configura tu link de MercadoPago');
-  } else {
-    window.open(links[pendingPlan], '_blank');
-    showToast('Abriendo MercadoPago... Pagá y luego pegá el ID arriba para activar');
-  }
+function closeCheckout(){
+  document.getElementById('modal-checkout').classList.add('hidden');
 }
 
-// PAYPAL NUEVO - COBRO A acevedo_construcciones@hotmail.com
-function payWithPayPal(){
-  const isGold = pendingPlan==='gold';
-  const amount = isGold ? '49' : '89';
-  const business = 'acevedo_construcciones@hotmail.com';
-  const itemName = isGold ? 'Velo Gold - VeloApp.store' : 'Velo Platinum - VeloApp.store';
-  // Link directo de PayPal con retorno automático
-  const returnUrl = window.location.origin + window.location.pathname + '?pago=exitoso&plan=' + pendingPlan;
-  const cancelUrl = window.location.origin + window.location.pathname;
-  const paypalUrl = `https://www.paypal.com/cgi-bin/webscr?cmd=_xclick&business=${encodeURIComponent(business)}&amount=${amount}&currency_code=USD&item_name=${encodeURIComponent(itemName)}&return=${encodeURIComponent(returnUrl)}&cancel_return=${encodeURIComponent(cancelUrl)}&no_shipping=1&rm=1`;
-
-  try{
-    fetch('https://formsubmit.co/ajax/4a8becaf83990535ff8cdec3c7c4e3d6',{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify({name:currentUser?.name||'Invitado',email:currentUser?.email||'sin-email',plan:pendingPlan,price:amount+' USD',method:'PayPal',paypal_to:business,_subject:`Intento de pago ${pendingPlan} - PayPal ${amount} USD`,message:`Usuario ${currentUser?.name} (${currentUser?.email}) quiere pagar ${pendingPlan} por PayPal ${amount} USD a ${business} - Ciudad ${currentUser?.city}`})});
-  }catch(e){}
-
-  window.open(paypalUrl, '_blank');
-  showToast('Abriendo PayPal hacia '+business+'... Pagá y volvé');
-}
-
-function payWithStripe(){
-  const isGold = pendingPlan==='gold';
-  const links = {
-    gold: localStorage.getItem('stripe_link_gold') || 'https://buy.stripe.com/test_gold_placeholder',
-    platinum: localStorage.getItem('stripe_link_platinum') || 'https://buy.stripe.com/test_platinum_placeholder'
-  };
-  const priceUSD = isGold ? '49' : '89';
-  try{
-    fetch('https://formsubmit.co/ajax/4a8becaf83990535ff8cdec3c7c4e3d6',{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify({name:currentUser?.name||'Invitado',email:currentUser?.email||'sin-email',plan:pendingPlan,price:priceUSD+' USD',method:'Stripe',_subject:`Intento de pago ${pendingPlan} - Stripe ${priceUSD} USD`,message:`Usuario ${currentUser?.name} quiere pagar ${pendingPlan} por Stripe ${priceUSD} USD`})});
-  }catch(e){}
-  if(links[pendingPlan].includes('placeholder')){
-    showToast('⚙️ Configura tu link de Stripe. Por ahora activo Gold de prueba.');
-    setTimeout(()=>{ activateAfterPayment(); }, 800);
-  } else {
-    window.open(links[pendingPlan], '_blank');
-    showToast('Abriendo Stripe...');
-  }
-}
-function payWithWhatsapp(){
-  const isGold = pendingPlan==='gold';
-  const text = encodeURIComponent(`Hola Claudia! Quiero pagar Velo ${isGold?'Gold $49 / $1990':'Platinum $89 / $3490'} con PayPal a ${'acevedo_construcciones@hotmail.com'} en VeloApp.store. Soy ${currentUser?.name||''} de ${currentUser?.city||''}. Mi email: ${currentUser?.email||''}`);
-  window.open(`https://wa.me/59800000000?text=${text}`, '_blank');
-  showToast('Abriendo WhatsApp de Claudia para pago directo');
-}
-async function activateAfterPayment(){
-  const codeInput = document.getElementById('payment-code');
-  const paymentId = codeInput ? codeInput.value.trim() : '';
-  const email = (currentUser && currentUser.email) ? currentUser.email : '';
-  const plan = pendingPlan || 'gold';
-  
-  if(!paymentId){
-    showToast('⚠️ Pegá el ID de MercadoPago que te llegó por mail (ej: 1234567890)');
-    if(codeInput) codeInput.focus();
+async function payWithPayPal(){
+  if(!currentUser || !currentUser.email){
+    showToast('Iniciá sesión antes de continuar con PayPal');
+    closeCheckout();
+    openLogin();
     return;
   }
-  if(!email){
-    showToast('⚠️ Iniciá sesión con email para activar');
-    return;
-  }
-  
-  const btn = document.querySelector('#modal-checkout button[onclick="activateAfterPayment()"]');
-  const originalText = btn ? btn.innerText : 'Activar ya';
-  if(btn){ btn.disabled=true; btn.innerText='🔒 Verificando...'; }
-  showToast('🔒 Verificando pago con MercadoPago...');
-  
+
+  const selected = getSelectedMembership();
+  const btn = document.getElementById('paypal-subscribe-btn');
+  const originalText = btn ? btn.innerHTML : '';
+
   try{
-    const res = await fetch('/api', {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ payment_id: paymentId, email: email, plan: plan })
-    });
-    const data = await res.json();
-    if(data.ok){
-      premium=true;
-      localStorage.setItem('velo_premium','true');
-      localStorage.setItem('velo_premium_plan', plan);
-      localStorage.setItem('velo_premium_date', new Date().toISOString());
-      localStorage.setItem('velo_premium_email', email);
-      closeCheckout();
-      closeModals();
-      updateGold();
-      const isGold = plan==='gold';
-      showToast(isGold?'✅ ¡Ahora sos Gold $49! 👑 Activo':'✅ ¡Ahora sos Platinum $89! 👑👑 Activo');
-      try{
-        fetch('https://formsubmit.co/ajax/4a8becaf83990535ff8cdec3c7c4e3d6',{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify({name:currentUser?.name||'Invitado',email:email,plan:plan,price:isGold?'$49 / $1990':'$89 / $3490',payment_id:paymentId,monto_verificado:data.monto||data.pago?.monto,paypal_to:'acevedo_construcciones@hotmail.com',_subject:`✅ PAGO VERIFICADO ${plan.toUpperCase()} - ${currentUser?.name}`,message:`PAGO VERIFICADO REAL: Plan ${plan} - Usuario ${currentUser?.name} - Email ${email} - Ciudad ${currentUser?.city} - Fecha ${new Date().toISOString()} - ID MP ${paymentId} - Monto ${data.monto} - Verificado por /api blindado`})});
-      }catch(e){}
-    }else{
-      showToast('❌ ' + (data.error || 'Pago no verificado - revisá el ID'));
-      if(btn){ btn.disabled=false; btn.innerText=originalText; }
+    if(btn){
+      btn.disabled = true;
+      btn.innerHTML = '<span>Conectando con PayPal...</span><span>🔒</span>';
     }
+    showToast('Preparando tu suscripción segura...');
+
+    const response = await fetch('/api?action=paypal-create-subscription', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        email: currentUser.email,
+        plan_code: selected.code
+      })
+    });
+    const data = await response.json();
+
+    if(!response.ok || !data.ok || !data.approve_url){
+      throw new Error(data.error || 'PayPal no devolvió el enlace de aprobación');
+    }
+
+    localStorage.setItem('velo_pending_paypal_plan', pendingPlan);
+    localStorage.setItem('velo_pending_paypal_period', pendingPeriod);
+    localStorage.setItem('velo_pending_paypal_subscription', data.subscription_id || '');
+    window.location.href = data.approve_url;
+  }catch(error){
+    showToast('❌ ' + error.message);
+    if(btn){ btn.disabled = false; btn.innerHTML = originalText; }
+  }
+}
+
+async function refreshPayPalMembership(showResult=true){
+  if(!currentUser || !currentUser.email) return false;
+  try{
+    const response = await fetch('/api?action=paypal-subscription-status&email=' + encodeURIComponent(currentUser.email));
+    const data = await response.json();
+    const sub = data && data.subscription ? data.subscription : null;
+    if(!response.ok || !data.ok || !sub) return false;
+
+    const active = String(sub.estado || '').toUpperCase() === 'ACTIVE';
+    if(active){
+      premium = true;
+      localStorage.setItem('velo_premium','true');
+      localStorage.setItem('velo_premium_plan', sub.membresia || pendingPlan);
+      localStorage.setItem('velo_premium_period', sub.periodicidad || pendingPeriod);
+      localStorage.setItem('velo_premium_email', currentUser.email);
+      updateGold();
+      if(showResult) showToast('✅ Membresía ' + String(sub.membresia || '').toUpperCase() + ' activa');
+      return true;
+    }
+    return false;
   }catch(e){
-    showToast('❌ Error verificando: ' + e.message);
-    if(btn){ btn.disabled=false; btn.innerText=originalText; }
+    return false;
   }
 }
-function buyPremium(plan){ openCheckout(plan); }
-function updateGold(){const el=document.getElementById('gold-status');if(premium){el.innerHTML='✓ Gold Activo — Likes ilimitados';}else{el.innerHTML='Sin Gold: 12 likes ocultos';}}
-function checkPaymentReturn(){
+
+async function handlePayPalReturn(){
   const params = new URLSearchParams(window.location.search);
-  const pago = params.get('pago');
-  const plan = params.get('plan') || 'gold';
-  if(pago==='exitoso' || pago==='success'){
-    pendingPlan = plan;
-    showToast('✅ Pago PayPal recibido - Pegá tu ID si pagaste por MP o contactá a Claudia');
-    openCheckout(plan);
-    window.history.replaceState({}, document.title, window.location.pathname);
+  const paypal = params.get('paypal');
+  if(!paypal) return;
+
+  window.history.replaceState({}, document.title, window.location.pathname);
+
+  if(paypal === 'cancel'){
+    showToast('Pago cancelado. No se realizó ningún cambio.');
+    return;
+  }
+
+  if(paypal === 'success'){
+    showToast('✅ PayPal recibió la operación. Confirmando membresía...');
+    for(let i=0;i<4;i++){
+      const active = await refreshPayPalMembership(false);
+      if(active){
+        showToast('✅ Pago confirmado. Tu membresía ya está activa.');
+        return;
+      }
+      await new Promise(resolve => setTimeout(resolve, 1800));
+    }
+    showToast('⏳ PayPal está terminando de confirmar el pago. Se activará automáticamente.');
   }
 }
+
+function buyPremium(plan){ openCheckout(plan); }
+function updateGold(){
+  const el=document.getElementById('gold-status');
+  if(!el) return;
+  if(premium){
+    const activePlan = localStorage.getItem('velo_premium_plan') || 'gold';
+    el.innerHTML = activePlan === 'platinum' ? '✓ Platinum Activo — Beneficios completos' : '✓ Gold Activo — Beneficios desbloqueados';
+  }else{
+    el.innerHTML='Free activo — 15 likes por día';
+  }
+}
+function checkPaymentReturn(){ handlePayPalReturn(); }
 function showToast(m){const t=document.getElementById('toast');t.innerText=m;t.classList.remove('hidden');setTimeout(()=>t.classList.add('hidden'),2800);}
 init();
 </script>
