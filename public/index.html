@@ -308,6 +308,14 @@ function closeModals(){document.getElementById('modal-login').classList.add('hid
 
 let profilePhotos=[];
 
+// Escapa texto antes de insertarlo dentro del HTML.
+// Evita el error: "escapeHtml is not defined".
+function escapeHtml(value){
+ const div=document.createElement('div');
+ div.textContent=String(value ?? '');
+ return div.innerHTML;
+}
+
 function renderProfilePhotos(){
  const grid=document.getElementById('profile-photo-grid');
  const count=document.getElementById('profile-photo-count');
