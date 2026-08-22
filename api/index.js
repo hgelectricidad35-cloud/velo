@@ -2498,6 +2498,42 @@ async function getProfilePhotos(req, res) {
     return res.status(500).json({ ok: false, error: e.message });
   }
 }
+async function uploadProfilePhoto(req, res) {
+  try {
+    const body = getBody(req);
+    const email = String(body.email || '').trim().toLowerCase();
+    const dataUrl = String(body.data_url || '');
+
+    if (!email || !dataUrl) {
+      return res.status(400).json({ ok: false, error: 'Falta email o imagen' });
+    }
+
+    if (!/^data:image\/(jpeg|jpg|png|webp);base64,/i.test(dataUrl)) {
+      return res.status(400).json({
+        ok: false,
+        error: 'Formato no permitido. Usá JPG, PNG o WEBP.'
+      });
+    }
+
+    // El frontend comprime antes de enviar. Este límite evita cargas enormes.
+    if (dataUrl.length > 3_000_000) {
+      return res.status(413).json({
+        ok: false,
+        error: 'La imagen es demasiado pesada. Elegí una foto menor.'
+      });
+    }
+
+    const user = await getUserByEmail(email);
+
+    if (!user) {
+      return res.status(404).json({ ok: false, error: 'Usuario no encontrado' });
+    }
+
+    await ensureProfilePhotosTable();
+
+    const countResult = await pool.query(
+      'SELECT COUNT(*)::int AS total FROM fotos_perfil WHERE usuario_id=$1',
+      [user.id]
     );
 
     const total = Number(countResult.rows[0]?.total || 0);
