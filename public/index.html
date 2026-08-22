@@ -701,7 +701,7 @@ function renderStack(){
  }
 
  const list = activeProfiles();
- cont.innerHTML = list.slice(0,5).map(p=>`<img src="${p.img || DEFAULT_PROFILE_IMG}" title="${escapeHtml(p.name||'Usuario')}" class="w-12 h-12 rounded-full object-cover border-2 border-[#111113] -ml-2 first:ml-0">`).join('');
+ cont.innerHTML = list.slice(0,5).map(p=>`<img src="${p.img || DEFAULT_PROFILE_IMG}" class="w-12 h-12 rounded-full object-cover border-2 border-[#111113] -ml-2 first:ml-0">`).join('');
 }
 function like(){
  if(currentTab!=='cerca'){showToast('💛 Claudia es la Host oficial de VeloApp'); return;}
