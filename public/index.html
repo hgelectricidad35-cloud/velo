@@ -308,40 +308,65 @@ function closeModals(){document.getElementById('modal-login').classList.add('hid
 
 let profilePhotos=[];
 
-// Escapa texto antes de insertarlo dentro del HTML.
-// Evita el error: "escapeHtml is not defined".
-function escapeHtml(value){
- const div=document.createElement('div');
- div.textContent=String(value ?? '');
- return div.innerHTML;
-}
-
 function renderProfilePhotos(){
  const grid=document.getElementById('profile-photo-grid');
  const count=document.getElementById('profile-photo-count');
  const addBtn=document.getElementById('profile-photo-add-btn');
  if(!grid||!count||!addBtn) return;
 
- count.innerText=profilePhotos.length+' / 6';
- addBtn.disabled=profilePhotos.length>=6;
- addBtn.classList.toggle('opacity-40',profilePhotos.length>=6);
+ const photos=Array.isArray(profilePhotos) ? profilePhotos.filter(p=>p && typeof p.url_foto==='string' && p.url_foto.trim()) : [];
+ count.innerText=photos.length+' / 6';
+ addBtn.disabled=photos.length>=6;
+ addBtn.classList.toggle('opacity-40',photos.length>=6);
+ grid.innerHTML='';
 
- const items=profilePhotos.map(p=>`
-   <div class="relative aspect-square rounded-xl overflow-hidden border ${p.es_principal?'border-[#D4B78F]':'border-[#D4B78F]/15'} bg-[#08080A]">
-     <img src="${escapeHtml(p.url_foto)}" class="w-full h-full object-cover" alt="Foto de perfil">
-     ${p.es_principal?'<div class="absolute top-1 left-1 text-[9px] bg-[#D4B78F] text-black px-2 py-1 rounded-full font-bold">PRINCIPAL</div>':''}
-     <div class="absolute bottom-1 left-1 right-1 flex gap-1">
-       ${p.es_principal?'':`<button type="button" onclick="setPrimaryProfilePhoto(${Number(p.id)})" class="flex-1 text-[9px] bg-black/80 rounded-full py-1">Principal</button>`}
-       <button type="button" onclick="deleteProfilePhoto(${Number(p.id)})" class="text-[10px] bg-black/80 rounded-full px-2 py-1">✕</button>
-     </div>
-   </div>
- `).join('');
+ photos.forEach(p=>{
+   const card=document.createElement('div');
+   card.className='relative aspect-square rounded-xl overflow-hidden border bg-[#08080A] '+(p.es_principal?'border-[#D4B78F]':'border-[#D4B78F]/15');
 
- const emptySlots=Array.from({length:Math.max(0,6-profilePhotos.length)},()=>`
-   <button type="button" onclick="document.getElementById('profile-photo-file').click()" class="aspect-square rounded-xl border border-dashed border-[#D4B78F]/20 flex items-center justify-center text-xl opacity-40 hover:opacity-70">＋</button>
- `).join('');
+   const img=document.createElement('img');
+   img.src=p.url_foto;
+   img.alt='Foto de perfil';
+   img.className='w-full h-full object-cover';
+   img.loading='eager';
+   img.onerror=()=>{ card.style.display='none'; };
+   card.appendChild(img);
 
- grid.innerHTML=items+emptySlots;
+   if(p.es_principal){
+     const badge=document.createElement('div');
+     badge.className='absolute top-1 left-1 text-[9px] bg-[#D4B78F] text-black px-2 py-1 rounded-full font-bold';
+     badge.textContent='PRINCIPAL';
+     card.appendChild(badge);
+   }
+
+   const controls=document.createElement('div');
+   controls.className='absolute bottom-1 left-1 right-1 flex gap-1';
+   if(!p.es_principal){
+     const primary=document.createElement('button');
+     primary.type='button';
+     primary.className='flex-1 text-[9px] bg-black/80 rounded-full py-1';
+     primary.textContent='Principal';
+     primary.onclick=()=>setPrimaryProfilePhoto(Number(p.id));
+     controls.appendChild(primary);
+   }
+   const del=document.createElement('button');
+   del.type='button';
+   del.className='text-[10px] bg-black/80 rounded-full px-2 py-1';
+   del.textContent='✕';
+   del.onclick=()=>deleteProfilePhoto(Number(p.id));
+   controls.appendChild(del);
+   card.appendChild(controls);
+   grid.appendChild(card);
+ });
+
+ for(let i=photos.length;i<6;i++){
+   const empty=document.createElement('button');
+   empty.type='button';
+   empty.className='aspect-square rounded-xl border border-dashed border-[#D4B78F]/20 flex items-center justify-center text-xl opacity-40 hover:opacity-70';
+   empty.textContent='＋';
+   empty.onclick=()=>document.getElementById('profile-photo-file').click();
+   grid.appendChild(empty);
+ }
 }
 
 async function loadProfilePhotos(){
