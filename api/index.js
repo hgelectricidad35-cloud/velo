@@ -322,7 +322,6 @@ async function registerUser(req, res) {
 }
 
 
-
 async function loginUser(req, res) {
 
   try {
@@ -382,7 +381,6 @@ async function loginUser(req, res) {
       FROM usuarios
 
       WHERE LOWER(email)=LOWER($1)
-
       AND password=$2
 
       LIMIT 1
@@ -428,7 +426,6 @@ async function loginUser(req, res) {
   }
 
 }
-
 
 
 async function getProfile(req, res) {
@@ -528,7 +525,6 @@ async function getProfile(req, res) {
   }
 
 }
-
 
 
 async function updateProfile(req, res) {
@@ -713,11 +709,9 @@ async function updateProfile(req, res) {
 
         longitud = $11,
 
-        actualizado_en =
-          NOW()
+        actualizado_en = NOW()
 
-      WHERE
-        LOWER(email)=LOWER($1)
+      WHERE LOWER(email)=LOWER($1)
 
       RETURNING
 
@@ -752,7 +746,7 @@ async function updateProfile(req, res) {
     );
 
 
-    if (result.rows.length === 0) {
+    if (!result.rows || result.rows.length === 0) {
 
       return res.status(404).json({
         ok: false,
@@ -765,7 +759,10 @@ async function updateProfile(req, res) {
 
     return res.status(200).json({
       ok: true,
-      user: result.rows[0]
+      message:
+        'Perfil actualizado',
+      user:
+        result.rows[0]
     });
 
 
@@ -779,16 +776,13 @@ async function updateProfile(req, res) {
     return res.status(500).json({
       ok: false,
       error:
-        'No se pudo guardar el perfil: ' +
+        'No se pudo actualizar el perfil: ' +
         e.message
     });
 
   }
 
 }
-
-
-
 async function searchPeople(req, res) {
 
   try {
@@ -1368,7 +1362,6 @@ async function bootstrapPayPal(req, res) {
     });
   }
 }
-
 async function createPayPalSubscription(req, res) {
   try {
     const body = getBody(req);
@@ -1471,8 +1464,10 @@ async function createPayPalSubscription(req, res) {
       plan_code: planCode,
       approve_url: approveUrl
     });
+
   } catch (e) {
     console.error('VELOAPP PAYPAL CREATE SUBSCRIPTION ERROR:', e);
+
     return res.status(500).json({
       ok: false,
       error: 'No se pudo iniciar la suscripción: ' + e.message
@@ -1480,13 +1475,14 @@ async function createPayPalSubscription(req, res) {
   }
 }
 
-async
-function getPayPalSubscriptionDetails(subscriptionId) {
+
+async function getPayPalSubscriptionDetails(subscriptionId) {
   return paypalFetch(
     `/v1/billing/subscriptions/${encodeURIComponent(subscriptionId)}`,
     { method: 'GET' }
   );
 }
+
 
 function parseVeloCustomId(customId) {
   const value = String(customId || '');
@@ -1502,8 +1498,10 @@ function parseVeloCustomId(customId) {
   return { userId, planCode };
 }
 
+
 async function verifyPayPalWebhook(req, webhookEvent) {
   const webhookId = await getPayPalConfig('webhook_id');
+
   if (!webhookId) return false;
 
   const payload = {
@@ -1516,13 +1514,17 @@ async function verifyPayPalWebhook(req, webhookEvent) {
     webhook_event: webhookEvent
   };
 
-  const result = await paypalFetch('/v1/notifications/verify-webhook-signature', {
-    method: 'POST',
-    body: JSON.stringify(payload)
-  });
+  const result = await paypalFetch(
+    '/v1/notifications/verify-webhook-signature',
+    {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    }
+  );
 
   return result.verification_status === 'SUCCESS';
 }
+
 
 async function resolveSubscriptionFromWebhook(event) {
   const resource = event?.resource || {};
@@ -1541,8 +1543,11 @@ async function resolveSubscriptionFromWebhook(event) {
 
   if (!subscriptionId) return null;
 
-  const details = await getPayPalSubscriptionDetails(subscriptionId);
-  const parsed = parseVeloCustomId(details.custom_id);
+  const details =
+    await getPayPalSubscriptionDetails(subscriptionId);
+
+  const parsed =
+    parseVeloCustomId(details.custom_id);
 
   if (!parsed) return null;
 
@@ -1553,14 +1558,33 @@ async function resolveSubscriptionFromWebhook(event) {
   };
 }
 
-async function syncMembershipFromPayPalEvent(event) {
-  const resolved = await resolveSubscriptionFromWebhook(event);
-  if (!resolved) return { ignored: true, reason: 'Sin referencia VeloApp' };
 
-  const { subscriptionId, details, userId, planCode } = resolved;
-  const def = VELO_PAYPAL_PLANS[planCode];
-  const eventType = String(event.event_type || '');
-  const status = String(details.status || '').toUpperCase();
+async function syncMembershipFromPayPalEvent(event) {
+  const resolved =
+    await resolveSubscriptionFromWebhook(event);
+
+  if (!resolved) {
+    return {
+      ignored: true,
+      reason: 'Sin referencia VeloApp'
+    };
+  }
+
+  const {
+    subscriptionId,
+    details,
+    userId,
+    planCode
+  } = resolved;
+
+  const def =
+    VELO_PAYPAL_PLANS[planCode];
+
+  const eventType =
+    String(event.event_type || '');
+
+  const status =
+    String(details.status || '').toUpperCase();
 
   const activate =
     eventType === 'BILLING.SUBSCRIPTION.ACTIVATED' ||
@@ -1571,7 +1595,12 @@ async function syncMembershipFromPayPalEvent(event) {
     'BILLING.SUBSCRIPTION.CANCELLED',
     'BILLING.SUBSCRIPTION.SUSPENDED',
     'BILLING.SUBSCRIPTION.EXPIRED'
-  ].includes(eventType) || ['CANCELLED', 'SUSPENDED', 'EXPIRED'].includes(status);
+  ].includes(eventType) ||
+  [
+    'CANCELLED',
+    'SUSPENDED',
+    'EXPIRED'
+  ].includes(status);
 
   await ensurePayPalTables();
 
@@ -1581,10 +1610,14 @@ async function syncMembershipFromPayPalEvent(event) {
   );
 
   if (userResult.rows.length === 0) {
-    return { ignored: true, reason: 'Usuario VeloApp inexistente' };
+    return {
+      ignored: true,
+      reason: 'Usuario VeloApp inexistente'
+    };
   }
 
-  const userEmail = userResult.rows[0].email;
+  const userEmail =
+    userResult.rows[0].email;
 
   await pool.query(
     `INSERT INTO suscripciones
@@ -1616,7 +1649,10 @@ async function syncMembershipFromPayPalEvent(event) {
       `UPDATE usuarios
        SET membresia=$2, actualizado_en=NOW()
        WHERE id=$1`,
-      [userId, def.tier]
+      [
+        userId,
+        def.tier
+      ]
     );
   }
 
@@ -1630,11 +1666,28 @@ async function syncMembershipFromPayPalEvent(event) {
   }
 
   if (eventType === 'PAYMENT.SALE.COMPLETED') {
-    const paymentId = String(event.resource?.id || event.id || '');
-    const amountValue = Number(event.resource?.amount?.total || 0);
-    const currency = String(event.resource?.amount?.currency || 'USD');
+
+    const paymentId =
+      String(
+        event.resource?.id ||
+        event.id ||
+        ''
+      );
+
+    const amountValue =
+      Number(
+        event.resource?.amount?.total ||
+        0
+      );
+
+    const currency =
+      String(
+        event.resource?.amount?.currency ||
+        'USD'
+      );
 
     if (paymentId) {
+
       await pool.query(`
         CREATE TABLE IF NOT EXISTS pagos (
           id BIGSERIAL PRIMARY KEY,
@@ -1655,7 +1708,14 @@ async function syncMembershipFromPayPalEvent(event) {
           (payment_id, usuario_id, email, plan, monto, moneda, estado, proveedor)
          VALUES ($1,$2,$3,$4,$5,$6,'completed','paypal')
          ON CONFLICT (payment_id) DO NOTHING`,
-        [paymentId, userId, userEmail, planCode, amountValue, currency]
+        [
+          paymentId,
+          userId,
+          userEmail,
+          planCode,
+          amountValue,
+          currency
+        ]
       );
     }
   }
@@ -1663,86 +1723,159 @@ async function syncMembershipFromPayPalEvent(event) {
   return {
     ignored: false,
     user_id: userId,
-    membership: deactivate ? 'free' : def.tier,
-    subscription_id: subscriptionId,
-    status: details.status
+    membership:
+      deactivate
+        ? 'free'
+        : def.tier,
+    subscription_id:
+      subscriptionId,
+    status:
+      details.status
   };
 }
 
+
 async function paypalWebhook(req, res) {
   try {
-    const event = getBody(req);
+
+    const event =
+      getBody(req);
 
     if (!event?.id || !event?.event_type) {
-      return res.status(400).json({ ok: false, error: 'Webhook PayPal inválido' });
+      return res.status(400).json({
+        ok: false,
+        error: 'Webhook PayPal inválido'
+      });
     }
 
-    const verified = await verifyPayPalWebhook(req, event);
+    const verified =
+      await verifyPayPalWebhook(
+        req,
+        event
+      );
 
     if (!verified) {
-      console.warn('VELOAPP PAYPAL WEBHOOK FIRMA INVALIDA:', event.id);
-      return res.status(400).json({ ok: false, error: 'Firma PayPal inválida' });
+      console.warn(
+        'VELOAPP PAYPAL WEBHOOK FIRMA INVALIDA:',
+        event.id
+      );
+
+      return res.status(400).json({
+        ok: false,
+        error: 'Firma PayPal inválida'
+      });
     }
 
     await ensurePayPalTables();
 
-    const duplicate = await pool.query(
-      'SELECT event_id FROM paypal_eventos WHERE event_id=$1 LIMIT 1',
-      [event.id]
-    );
+    const duplicate =
+      await pool.query(
+        'SELECT event_id FROM paypal_eventos WHERE event_id=$1 LIMIT 1',
+        [event.id]
+      );
 
     if (duplicate.rows.length > 0) {
-      return res.status(200).json({ ok: true, duplicate: true });
+      return res.status(200).json({
+        ok: true,
+        duplicate: true
+      });
     }
 
-    const result = await syncMembershipFromPayPalEvent(event);
+    const result =
+      await syncMembershipFromPayPalEvent(event);
 
     await pool.query(
-      `INSERT INTO paypal_eventos (event_id, event_type, recibido_en)
+      `INSERT INTO paypal_eventos
+       (event_id, event_type, recibido_en)
        VALUES ($1,$2,NOW())
        ON CONFLICT (event_id) DO NOTHING`,
-      [event.id, event.event_type]
+      [
+        event.id,
+        event.event_type
+      ]
     );
 
-    console.log('VELOAPP PAYPAL WEBHOOK OK:', event.event_type, event.id, result);
-
-    return res.status(200).json({ ok: true, result });
-  } catch (e) {
-    console.error('VELOAPP PAYPAL WEBHOOK ERROR:', e);
-    return res.status(500).json({ ok: false, error: e.message });
-  }
-}
-
-async function paypalSubscriptionStatus(req, res) {
-  try {
-    const email = String(req.query?.email || '').trim().toLowerCase();
-
-    if (!email) {
-      return res.status(400).json({ ok: false, error: 'Falta email' });
-    }
-
-    await ensurePayPalTables();
-
-    const result = await pool.query(
-      `SELECT plan_code, membresia, periodicidad, estado,
-              proveedor_subscription_id, proximo_cobro, actualizado_en
-       FROM suscripciones
-       WHERE LOWER(email)=LOWER($1) AND proveedor='paypal'
-       ORDER BY actualizado_en DESC
-       LIMIT 1`,
-      [email]
+    console.log(
+      'VELOAPP PAYPAL WEBHOOK OK:',
+      event.event_type,
+      event.id,
+      result
     );
 
     return res.status(200).json({
       ok: true,
-      subscription: result.rows[0] || null
+      result
     });
+
   } catch (e) {
-    console.error('VELOAPP PAYPAL SUBSCRIPTION STATUS ERROR:', e);
-    return res.status(500).json({ ok: false, error: e.message });
+
+    console.error(
+      'VELOAPP PAYPAL WEBHOOK ERROR:',
+      e
+    );
+
+    return res.status(500).json({
+      ok: false,
+      error: e.message
+    });
   }
 }
 
+
+async function paypalSubscriptionStatus(req, res) {
+  try {
+
+    const email =
+      String(req.query?.email || '')
+        .trim()
+        .toLowerCase();
+
+    if (!email) {
+      return res.status(400).json({
+        ok: false,
+        error: 'Falta email'
+      });
+    }
+
+    await ensurePayPalTables();
+
+    const result =
+      await pool.query(
+        `SELECT
+           plan_code,
+           membresia,
+           periodicidad,
+           estado,
+           proveedor_subscription_id,
+           proximo_cobro,
+           actualizado_en
+         FROM suscripciones
+         WHERE LOWER(email)=LOWER($1)
+           AND proveedor='paypal'
+         ORDER BY actualizado_en DESC
+         LIMIT 1`,
+        [email]
+      );
+
+    return res.status(200).json({
+      ok: true,
+      subscription:
+        result.rows[0] || null
+    });
+
+  } catch (e) {
+
+    console.error(
+      'VELOAPP PAYPAL SUBSCRIPTION STATUS ERROR:',
+      e
+    );
+
+    return res.status(500).json({
+      ok: false,
+      error: e.message
+    });
+  }
+}
 async function verifyPayment(req, res) {
 
   if (!databaseUrl) {
@@ -2365,43 +2498,6 @@ async function getProfilePhotos(req, res) {
     return res.status(500).json({ ok: false, error: e.message });
   }
 }
-
-async function uploadProfilePhoto(req, res) {
-  try {
-    const body = getBody(req);
-    const email = String(body.email || '').trim().toLowerCase();
-    const dataUrl = String(body.data_url || '');
-
-    if (!email || !dataUrl) {
-      return res.status(400).json({ ok: false, error: 'Falta email o imagen' });
-    }
-
-    if (!/^data:image\/(jpeg|jpg|png|webp);base64,/i.test(dataUrl)) {
-      return res.status(400).json({
-        ok: false,
-        error: 'Formato no permitido. Usá JPG, PNG o WEBP.'
-      });
-    }
-
-    // El frontend comprime antes de enviar. Este límite evita cargas enormes.
-    if (dataUrl.length > 3_000_000) {
-      return res.status(413).json({
-        ok: false,
-        error: 'La imagen es demasiado pesada. Elegí una foto menor.'
-      });
-    }
-
-    const user = await getUserByEmail(email);
-
-    if (!user) {
-      return res.status(404).json({ ok: false, error: 'Usuario no encontrado' });
-    }
-
-    await ensureProfilePhotosTable();
-
-    const countResult = await pool.query(
-      'SELECT COUNT(*)::int AS total FROM fotos_perfil WHERE usuario_id=$1',
-      [user.id]
     );
 
     const total = Number(countResult.rows[0]?.total || 0);
@@ -2570,6 +2666,7 @@ async function deleteProfilePhoto(req, res) {
 
       if (next.rows.length) {
         newPrimary = next.rows[0];
+
         await client.query(
           'UPDATE fotos_perfil SET es_principal=TRUE WHERE id=$1',
           [newPrimary.id]
@@ -2750,18 +2847,20 @@ export default async function handler(req, res) {
     if (req.method !== 'GET') {
       return res.status(405).json({ ok: false, error: 'Método no permitido' });
     }
+
     return paypalSetupStatus(req, res);
   }
 
 
   /*
-    PAYPAL - CREAR PRODUCTO, 4 PLANES Y WEBHOOK (UNA SOLA VEZ)
+    PAYPAL - CREAR PRODUCTO, 4 PLANES Y WEBHOOK
   */
 
   if (action === 'paypal-bootstrap') {
     if (req.method !== 'POST') {
       return res.status(405).json({ ok: false, error: 'Método no permitido' });
     }
+
     return bootstrapPayPal(req, res);
   }
 
@@ -2774,6 +2873,7 @@ export default async function handler(req, res) {
     if (req.method !== 'POST') {
       return res.status(405).json({ ok: false, error: 'Método no permitido' });
     }
+
     return createPayPalSubscription(req, res);
   }
 
@@ -2786,6 +2886,7 @@ export default async function handler(req, res) {
     if (req.method !== 'POST') {
       return res.status(405).json({ ok: false, error: 'Método no permitido' });
     }
+
     return paypalWebhook(req, res);
   }
 
@@ -2798,6 +2899,7 @@ export default async function handler(req, res) {
     if (req.method !== 'GET') {
       return res.status(405).json({ ok: false, error: 'Método no permitido' });
     }
+
     return paypalSubscriptionStatus(req, res);
   }
 
@@ -2810,6 +2912,7 @@ export default async function handler(req, res) {
     if (req.method !== 'GET') {
       return res.status(405).json({ ok: false, error: 'Método no permitido' });
     }
+
     return getProfilePhotos(req, res);
   }
 
@@ -2817,6 +2920,7 @@ export default async function handler(req, res) {
     if (req.method !== 'POST') {
       return res.status(405).json({ ok: false, error: 'Método no permitido' });
     }
+
     return uploadProfilePhoto(req, res);
   }
 
@@ -2824,6 +2928,7 @@ export default async function handler(req, res) {
     if (req.method !== 'POST') {
       return res.status(405).json({ ok: false, error: 'Método no permitido' });
     }
+
     return setPrimaryProfilePhoto(req, res);
   }
 
@@ -2831,6 +2936,7 @@ export default async function handler(req, res) {
     if (req.method !== 'POST') {
       return res.status(405).json({ ok: false, error: 'Método no permitido' });
     }
+
     return deleteProfilePhoto(req, res);
   }
 
