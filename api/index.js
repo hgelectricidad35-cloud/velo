@@ -2749,6 +2749,7 @@ async function ensureSocialTables() {
     throw new Error('Base de datos no configurada en Vercel');
   }
 
+  // Tablas sociales. SQL deliberadamente simple para máxima compatibilidad con Neon/PostgreSQL.
   await pool.query(`
     CREATE TABLE IF NOT EXISTS likes (
       id BIGSERIAL PRIMARY KEY,
@@ -2756,15 +2757,18 @@ async function ensureSocialTables() {
       receptor_id BIGINT NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
       tipo VARCHAR(20) NOT NULL DEFAULT 'like',
       creado_en TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      actualizado_en TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      CONSTRAINT likes_no_self CHECK (emisor_id <> receptor_id),
-      CONSTRAINT likes_unico UNIQUE (emisor_id, receptor_id)
+      actualizado_en TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `);
 
   await pool.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_likes_unico
+    ON likes (emisor_id, receptor_id)
+  `);
+
+  await pool.query(`
     CREATE INDEX IF NOT EXISTS idx_likes_receptor
-    ON likes(receptor_id, creado_en DESC)
+    ON likes (receptor_id)
   `);
 
   await pool.query(`
@@ -2772,20 +2776,23 @@ async function ensureSocialTables() {
       id BIGSERIAL PRIMARY KEY,
       usuario_a_id BIGINT NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
       usuario_b_id BIGINT NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
-      creado_en TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      CONSTRAINT matches_orden CHECK (usuario_a_id < usuario_b_id),
-      CONSTRAINT matches_unico UNIQUE (usuario_a_id, usuario_b_id)
+      creado_en TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `);
 
   await pool.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_matches_unico
+    ON matches (usuario_a_id, usuario_b_id)
+  `);
+
+  await pool.query(`
     CREATE INDEX IF NOT EXISTS idx_matches_a
-    ON matches(usuario_a_id, creado_en DESC)
+    ON matches (usuario_a_id)
   `);
 
   await pool.query(`
     CREATE INDEX IF NOT EXISTS idx_matches_b
-    ON matches(usuario_b_id, creado_en DESC)
+    ON matches (usuario_b_id)
   `);
 
   await pool.query(`
@@ -2801,7 +2808,7 @@ async function ensureSocialTables() {
 
   await pool.query(`
     CREATE INDEX IF NOT EXISTS idx_mensajes_match
-    ON mensajes(match_id, creado_en ASC, id ASC)
+    ON mensajes (match_id)
   `);
 }
 
