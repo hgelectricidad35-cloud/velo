@@ -2738,6 +2738,707 @@ async function deleteProfilePhoto(req, res) {
 }
 
 
+
+
+// ======================================================
+// VELOAPP SOCIAL - LIKES, MATCHES Y MENSAJES
+// ======================================================
+
+async function ensureSocialTables() {
+  if (!databaseUrl) {
+    throw new Error('Base de datos no configurada en Vercel');
+  }
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS likes (
+      id BIGSERIAL PRIMARY KEY,
+      emisor_id BIGINT NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+      receptor_id BIGINT NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+      tipo VARCHAR(20) NOT NULL DEFAULT 'like',
+      creado_en TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      actualizado_en TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      CONSTRAINT likes_no_self CHECK (emisor_id <> receptor_id),
+      CONSTRAINT likes_unico UNIQUE (emisor_id, receptor_id)
+    )
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_likes_receptor
+    ON likes(receptor_id, creado_en DESC)
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS matches (
+      id BIGSERIAL PRIMARY KEY,
+      usuario_a_id BIGINT NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+      usuario_b_id BIGINT NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+      creado_en TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      CONSTRAINT matches_orden CHECK (usuario_a_id < usuario_b_id),
+      CONSTRAINT matches_unico UNIQUE (usuario_a_id, usuario_b_id)
+    )
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_matches_a
+    ON matches(usuario_a_id, creado_en DESC)
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_matches_b
+    ON matches(usuario_b_id, creado_en DESC)
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS mensajes (
+      id BIGSERIAL PRIMARY KEY,
+      match_id BIGINT NOT NULL REFERENCES matches(id) ON DELETE CASCADE,
+      emisor_id BIGINT NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+      texto TEXT NOT NULL,
+      leido BOOLEAN NOT NULL DEFAULT FALSE,
+      creado_en TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_mensajes_match
+    ON mensajes(match_id, creado_en ASC, id ASC)
+  `);
+}
+
+async function getSocialUserByEmail(email) {
+  const normalized = String(email || '').trim().toLowerCase();
+
+  if (!normalized) return null;
+
+  const result = await pool.query(
+    `
+    SELECT
+      id,
+      nombre,
+      email,
+      membresia,
+      pais,
+      ciudad,
+      edad,
+      genero,
+      busca,
+      bio,
+      foto_url
+    FROM usuarios
+    WHERE LOWER(email)=LOWER($1)
+    LIMIT 1
+    `,
+    [normalized]
+  );
+
+  return result.rows[0] || null;
+}
+
+async function sendLike(req, res) {
+  try {
+    await ensureSocialTables();
+
+    const body = getBody(req);
+
+    const email =
+      String(body.email || '')
+        .trim()
+        .toLowerCase();
+
+    const targetUserId =
+      Number(body.target_user_id);
+
+    const tipoRaw =
+      String(body.tipo || 'like')
+        .trim()
+        .toLowerCase();
+
+    const tipo =
+      tipoRaw === 'superlike'
+        ? 'superlike'
+        : 'like';
+
+    if (!email || !Number.isInteger(targetUserId)) {
+      return res.status(400).json({
+        ok: false,
+        error: 'Falta email o target_user_id.'
+      });
+    }
+
+    const sender =
+      await getSocialUserByEmail(email);
+
+    if (!sender) {
+      return res.status(404).json({
+        ok: false,
+        error: 'Usuario emisor no encontrado.'
+      });
+    }
+
+    if (Number(sender.id) === targetUserId) {
+      return res.status(400).json({
+        ok: false,
+        error: 'No podés darte Like a vos mismo.'
+      });
+    }
+
+    const targetResult =
+      await pool.query(
+        `
+        SELECT
+          id,
+          nombre,
+          email,
+          foto_url,
+          ciudad,
+          pais
+        FROM usuarios
+        WHERE id=$1
+        LIMIT 1
+        `,
+        [targetUserId]
+      );
+
+    if (targetResult.rows.length === 0) {
+      return res.status(404).json({
+        ok: false,
+        error: 'El perfil ya no existe.'
+      });
+    }
+
+    await pool.query(
+      `
+      INSERT INTO likes
+        (emisor_id, receptor_id, tipo, actualizado_en)
+      VALUES
+        ($1,$2,$3,NOW())
+      ON CONFLICT (emisor_id, receptor_id)
+      DO UPDATE SET
+        tipo=EXCLUDED.tipo,
+        actualizado_en=NOW()
+      `,
+      [
+        sender.id,
+        targetUserId,
+        tipo
+      ]
+    );
+
+    const reciprocal =
+      await pool.query(
+        `
+        SELECT id
+        FROM likes
+        WHERE emisor_id=$1
+          AND receptor_id=$2
+        LIMIT 1
+        `,
+        [
+          targetUserId,
+          sender.id
+        ]
+      );
+
+    let match = null;
+
+    if (reciprocal.rows.length > 0) {
+      const a =
+        Math.min(
+          Number(sender.id),
+          targetUserId
+        );
+
+      const b =
+        Math.max(
+          Number(sender.id),
+          targetUserId
+        );
+
+      const matchResult =
+        await pool.query(
+          `
+          INSERT INTO matches
+            (usuario_a_id, usuario_b_id)
+          VALUES
+            ($1,$2)
+          ON CONFLICT (usuario_a_id, usuario_b_id)
+          DO UPDATE SET
+            usuario_a_id=EXCLUDED.usuario_a_id
+          RETURNING id, usuario_a_id, usuario_b_id, creado_en
+          `,
+          [a, b]
+        );
+
+      match = matchResult.rows[0];
+    }
+
+    return res.status(200).json({
+      ok: true,
+      tipo,
+      matched: Boolean(match),
+      match,
+      target: targetResult.rows[0]
+    });
+
+  } catch (e) {
+    console.error(
+      'VELOAPP LIKE ERROR:',
+      e
+    );
+
+    return res.status(500).json({
+      ok: false,
+      error:
+        'No se pudo guardar el Like: ' +
+        e.message
+    });
+  }
+}
+
+async function getIncomingLikes(req, res) {
+  try {
+    await ensureSocialTables();
+
+    const email =
+      String(req.query?.email || '')
+        .trim()
+        .toLowerCase();
+
+    if (!email) {
+      return res.status(400).json({
+        ok: false,
+        error: 'Falta email.'
+      });
+    }
+
+    const user =
+      await getSocialUserByEmail(email);
+
+    if (!user) {
+      return res.status(404).json({
+        ok: false,
+        error: 'Usuario no encontrado.'
+      });
+    }
+
+    const result =
+      await pool.query(
+        `
+        SELECT
+          l.id AS like_id,
+          l.tipo,
+          l.creado_en,
+          u.id,
+          u.nombre,
+          u.edad,
+          u.ciudad,
+          u.pais,
+          u.bio,
+          u.foto_url,
+          EXISTS(
+            SELECT 1
+            FROM likes r
+            WHERE r.emisor_id=$1
+              AND r.receptor_id=l.emisor_id
+          ) AS correspondido
+        FROM likes l
+        JOIN usuarios u
+          ON u.id=l.emisor_id
+        WHERE l.receptor_id=$1
+        ORDER BY
+          l.actualizado_en DESC,
+          l.id DESC
+        LIMIT 100
+        `,
+        [user.id]
+      );
+
+    return res.status(200).json({
+      ok: true,
+      count: result.rows.length,
+      likes: result.rows
+    });
+
+  } catch (e) {
+    console.error(
+      'VELOAPP INCOMING LIKES ERROR:',
+      e
+    );
+
+    return res.status(500).json({
+      ok: false,
+      error:
+        'No se pudieron cargar los Likes: ' +
+        e.message
+    });
+  }
+}
+
+async function getMatches(req, res) {
+  try {
+    await ensureSocialTables();
+
+    const email =
+      String(req.query?.email || '')
+        .trim()
+        .toLowerCase();
+
+    if (!email) {
+      return res.status(400).json({
+        ok: false,
+        error: 'Falta email.'
+      });
+    }
+
+    const user =
+      await getSocialUserByEmail(email);
+
+    if (!user) {
+      return res.status(404).json({
+        ok: false,
+        error: 'Usuario no encontrado.'
+      });
+    }
+
+    const result =
+      await pool.query(
+        `
+        SELECT
+          m.id AS match_id,
+          m.creado_en AS match_creado_en,
+          otro.id AS usuario_id,
+          otro.nombre,
+          otro.edad,
+          otro.ciudad,
+          otro.pais,
+          otro.bio,
+          otro.foto_url,
+          ultimo.texto AS ultimo_mensaje,
+          ultimo.creado_en AS ultimo_mensaje_en,
+          COALESCE(no_leidos.total,0)::int AS no_leidos
+        FROM matches m
+        JOIN usuarios otro
+          ON otro.id =
+            CASE
+              WHEN m.usuario_a_id=$1
+                THEN m.usuario_b_id
+              ELSE m.usuario_a_id
+            END
+        LEFT JOIN LATERAL (
+          SELECT
+            mm.texto,
+            mm.creado_en
+          FROM mensajes mm
+          WHERE mm.match_id=m.id
+          ORDER BY mm.creado_en DESC, mm.id DESC
+          LIMIT 1
+        ) ultimo ON TRUE
+        LEFT JOIN LATERAL (
+          SELECT COUNT(*) AS total
+          FROM mensajes mm2
+          WHERE mm2.match_id=m.id
+            AND mm2.emisor_id<>$1
+            AND mm2.leido=FALSE
+        ) no_leidos ON TRUE
+        WHERE
+          m.usuario_a_id=$1
+          OR
+          m.usuario_b_id=$1
+        ORDER BY
+          COALESCE(
+            ultimo.creado_en,
+            m.creado_en
+          ) DESC
+        LIMIT 100
+        `,
+        [user.id]
+      );
+
+    return res.status(200).json({
+      ok: true,
+      count: result.rows.length,
+      matches: result.rows
+    });
+
+  } catch (e) {
+    console.error(
+      'VELOAPP MATCHES ERROR:',
+      e
+    );
+
+    return res.status(500).json({
+      ok: false,
+      error:
+        'No se pudieron cargar los matches: ' +
+        e.message
+    });
+  }
+}
+
+async function getMessages(req, res) {
+  const client =
+    await pool.connect();
+
+  try {
+    await ensureSocialTables();
+
+    const email =
+      String(req.query?.email || '')
+        .trim()
+        .toLowerCase();
+
+    const matchId =
+      Number(req.query?.match_id);
+
+    if (!email || !Number.isInteger(matchId)) {
+      return res.status(400).json({
+        ok: false,
+        error: 'Falta email o match_id.'
+      });
+    }
+
+    const user =
+      await getSocialUserByEmail(email);
+
+    if (!user) {
+      return res.status(404).json({
+        ok: false,
+        error: 'Usuario no encontrado.'
+      });
+    }
+
+    const matchResult =
+      await client.query(
+        `
+        SELECT
+          id,
+          usuario_a_id,
+          usuario_b_id
+        FROM matches
+        WHERE id=$1
+          AND (
+            usuario_a_id=$2
+            OR usuario_b_id=$2
+          )
+        LIMIT 1
+        `,
+        [
+          matchId,
+          user.id
+        ]
+      );
+
+    if (matchResult.rows.length === 0) {
+      return res.status(403).json({
+        ok: false,
+        error: 'No tenés acceso a esa conversación.'
+      });
+    }
+
+    const match =
+      matchResult.rows[0];
+
+    const otherUserId =
+      Number(match.usuario_a_id) ===
+      Number(user.id)
+        ? match.usuario_b_id
+        : match.usuario_a_id;
+
+    const otherResult =
+      await client.query(
+        `
+        SELECT
+          id,
+          nombre,
+          edad,
+          ciudad,
+          pais,
+          foto_url
+        FROM usuarios
+        WHERE id=$1
+        LIMIT 1
+        `,
+        [otherUserId]
+      );
+
+    await client.query(
+      `
+      UPDATE mensajes
+      SET leido=TRUE
+      WHERE match_id=$1
+        AND emisor_id<>$2
+        AND leido=FALSE
+      `,
+      [
+        matchId,
+        user.id
+      ]
+    );
+
+    const messages =
+      await client.query(
+        `
+        SELECT
+          id,
+          match_id,
+          emisor_id,
+          texto,
+          leido,
+          creado_en
+        FROM mensajes
+        WHERE match_id=$1
+        ORDER BY
+          creado_en ASC,
+          id ASC
+        LIMIT 500
+        `,
+        [matchId]
+      );
+
+    return res.status(200).json({
+      ok: true,
+      match_id: matchId,
+      other_user:
+        otherResult.rows[0] || null,
+      messages: messages.rows
+    });
+
+  } catch (e) {
+    console.error(
+      'VELOAPP GET MESSAGES ERROR:',
+      e
+    );
+
+    return res.status(500).json({
+      ok: false,
+      error:
+        'No se pudieron cargar los mensajes: ' +
+        e.message
+    });
+
+  } finally {
+    client.release();
+  }
+}
+
+async function sendMessage(req, res) {
+  try {
+    await ensureSocialTables();
+
+    const body =
+      getBody(req);
+
+    const email =
+      String(body.email || '')
+        .trim()
+        .toLowerCase();
+
+    const matchId =
+      Number(body.match_id);
+
+    const message =
+      String(body.message || '')
+        .trim();
+
+    if (
+      !email ||
+      !Number.isInteger(matchId) ||
+      !message
+    ) {
+      return res.status(400).json({
+        ok: false,
+        error:
+          'Falta email, match_id o mensaje.'
+      });
+    }
+
+    if (message.length > 2000) {
+      return res.status(400).json({
+        ok: false,
+        error:
+          'El mensaje no puede superar 2000 caracteres.'
+      });
+    }
+
+    const user =
+      await getSocialUserByEmail(email);
+
+    if (!user) {
+      return res.status(404).json({
+        ok: false,
+        error: 'Usuario no encontrado.'
+      });
+    }
+
+    const allowed =
+      await pool.query(
+        `
+        SELECT id
+        FROM matches
+        WHERE id=$1
+          AND (
+            usuario_a_id=$2
+            OR usuario_b_id=$2
+          )
+        LIMIT 1
+        `,
+        [
+          matchId,
+          user.id
+        ]
+      );
+
+    if (allowed.rows.length === 0) {
+      return res.status(403).json({
+        ok: false,
+        error:
+          'Solo podés escribir dentro de un match.'
+      });
+    }
+
+    const inserted =
+      await pool.query(
+        `
+        INSERT INTO mensajes
+          (match_id, emisor_id, texto)
+        VALUES
+          ($1,$2,$3)
+        RETURNING
+          id,
+          match_id,
+          emisor_id,
+          texto,
+          leido,
+          creado_en
+        `,
+        [
+          matchId,
+          user.id,
+          message
+        ]
+      );
+
+    return res.status(201).json({
+      ok: true,
+      message: inserted.rows[0]
+    });
+
+  } catch (e) {
+    console.error(
+      'VELOAPP SEND MESSAGE ERROR:',
+      e
+    );
+
+    return res.status(500).json({
+      ok: false,
+      error:
+        'No se pudo enviar el mensaje: ' +
+        e.message
+    });
+  }
+}
+
+
 export default async function handler(req, res) {
 
   const action =
@@ -2871,6 +3572,86 @@ export default async function handler(req, res) {
       res
     );
 
+  }
+
+
+  /*
+    SOCIAL - LIKE / SUPERLIKE
+  */
+
+  if (action === 'like') {
+    if (req.method !== 'POST') {
+      return res.status(405).json({
+        ok: false,
+        error: 'Método no permitido'
+      });
+    }
+
+    return sendLike(req, res);
+  }
+
+
+  /*
+    SOCIAL - QUIÉN ME DIO LIKE
+  */
+
+  if (action === 'incoming-likes') {
+    if (req.method !== 'GET') {
+      return res.status(405).json({
+        ok: false,
+        error: 'Método no permitido'
+      });
+    }
+
+    return getIncomingLikes(req, res);
+  }
+
+
+  /*
+    SOCIAL - MATCHES / CONVERSACIONES
+  */
+
+  if (action === 'matches') {
+    if (req.method !== 'GET') {
+      return res.status(405).json({
+        ok: false,
+        error: 'Método no permitido'
+      });
+    }
+
+    return getMatches(req, res);
+  }
+
+
+  /*
+    SOCIAL - LEER MENSAJES
+  */
+
+  if (action === 'messages') {
+    if (req.method !== 'GET') {
+      return res.status(405).json({
+        ok: false,
+        error: 'Método no permitido'
+      });
+    }
+
+    return getMessages(req, res);
+  }
+
+
+  /*
+    SOCIAL - ENVIAR MENSAJE
+  */
+
+  if (action === 'send-message') {
+    if (req.method !== 'POST') {
+      return res.status(405).json({
+        ok: false,
+        error: 'Método no permitido'
+      });
+    }
+
+    return sendMessage(req, res);
   }
 
 
