@@ -2739,9 +2739,9 @@ async function deleteProfilePhoto(req, res) {
 
 
 
-
 // ======================================================
 // VELOAPP SOCIAL - LIKES, MATCHES Y MENSAJES
+// Base agregada sobre VELOAPP_INDEX_RECUPERADO_OK.js
 // ======================================================
 
 async function ensureSocialTables() {
@@ -2749,9 +2749,8 @@ async function ensureSocialTables() {
     throw new Error('Base de datos no configurada en Vercel');
   }
 
-  // Tablas sociales. SQL deliberadamente simple para máxima compatibilidad con Neon/PostgreSQL.
   await pool.query(`
-    CREATE TABLE IF NOT EXISTS likes (
+    CREATE TABLE IF NOT EXISTS velo_likes (
       id BIGSERIAL PRIMARY KEY,
       emisor_id BIGINT NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
       receptor_id BIGINT NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
@@ -2762,17 +2761,17 @@ async function ensureSocialTables() {
   `);
 
   await pool.query(`
-    CREATE UNIQUE INDEX IF NOT EXISTS idx_likes_unico
-    ON likes (emisor_id, receptor_id)
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_velo_likes_unico
+    ON velo_likes (emisor_id, receptor_id)
   `);
 
   await pool.query(`
-    CREATE INDEX IF NOT EXISTS idx_likes_receptor
-    ON likes (receptor_id)
+    CREATE INDEX IF NOT EXISTS idx_velo_likes_receptor
+    ON velo_likes (receptor_id)
   `);
 
   await pool.query(`
-    CREATE TABLE IF NOT EXISTS matches (
+    CREATE TABLE IF NOT EXISTS velo_matches (
       id BIGSERIAL PRIMARY KEY,
       usuario_a_id BIGINT NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
       usuario_b_id BIGINT NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
@@ -2781,24 +2780,14 @@ async function ensureSocialTables() {
   `);
 
   await pool.query(`
-    CREATE UNIQUE INDEX IF NOT EXISTS idx_matches_unico
-    ON matches (usuario_a_id, usuario_b_id)
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_velo_matches_unico
+    ON velo_matches (usuario_a_id, usuario_b_id)
   `);
 
   await pool.query(`
-    CREATE INDEX IF NOT EXISTS idx_matches_a
-    ON matches (usuario_a_id)
-  `);
-
-  await pool.query(`
-    CREATE INDEX IF NOT EXISTS idx_matches_b
-    ON matches (usuario_b_id)
-  `);
-
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS mensajes (
+    CREATE TABLE IF NOT EXISTS velo_mensajes (
       id BIGSERIAL PRIMARY KEY,
-      match_id BIGINT NOT NULL REFERENCES matches(id) ON DELETE CASCADE,
+      match_id BIGINT NOT NULL REFERENCES velo_matches(id) ON DELETE CASCADE,
       emisor_id BIGINT NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
       texto TEXT NOT NULL,
       leido BOOLEAN NOT NULL DEFAULT FALSE,
@@ -2807,39 +2796,47 @@ async function ensureSocialTables() {
   `);
 
   await pool.query(`
-    CREATE INDEX IF NOT EXISTS idx_mensajes_match
-    ON mensajes (match_id)
+    CREATE INDEX IF NOT EXISTS idx_velo_mensajes_match
+    ON velo_mensajes (match_id, creado_en, id)
   `);
 }
 
+
 async function getSocialUserByEmail(email) {
-  const normalized = String(email || '').trim().toLowerCase();
+  const normalized =
+    String(email || '')
+      .trim()
+      .toLowerCase();
 
-  if (!normalized) return null;
+  if (!normalized) {
+    return null;
+  }
 
-  const result = await pool.query(
-    `
-    SELECT
-      id,
-      nombre,
-      email,
-      membresia,
-      pais,
-      ciudad,
-      edad,
-      genero,
-      busca,
-      bio,
-      foto_url
-    FROM usuarios
-    WHERE LOWER(email)=LOWER($1)
-    LIMIT 1
-    `,
-    [normalized]
-  );
+  const result =
+    await pool.query(
+      `
+      SELECT
+        id,
+        nombre,
+        email,
+        membresia,
+        pais,
+        ciudad,
+        edad,
+        genero,
+        busca,
+        bio,
+        foto_url
+      FROM usuarios
+      WHERE LOWER(email)=LOWER($1)
+      LIMIT 1
+      `,
+      [normalized]
+    );
 
   return result.rows[0] || null;
 }
+
 
 async function sendLike(req, res) {
   try {
@@ -2855,17 +2852,17 @@ async function sendLike(req, res) {
     const targetUserId =
       Number(body.target_user_id);
 
-    const tipoRaw =
+    const tipo =
       String(body.tipo || 'like')
         .trim()
-        .toLowerCase();
-
-    const tipo =
-      tipoRaw === 'superlike'
+        .toLowerCase() === 'superlike'
         ? 'superlike'
         : 'like';
 
-    if (!email || !Number.isInteger(targetUserId)) {
+    if (
+      !email ||
+      !Number.isInteger(targetUserId)
+    ) {
       return res.status(400).json({
         ok: false,
         error: 'Falta email o target_user_id.'
@@ -2882,14 +2879,17 @@ async function sendLike(req, res) {
       });
     }
 
-    if (Number(sender.id) === targetUserId) {
+    if (
+      Number(sender.id) ===
+      targetUserId
+    ) {
       return res.status(400).json({
         ok: false,
         error: 'No podés darte Like a vos mismo.'
       });
     }
 
-    const targetResult =
+    const target =
       await pool.query(
         `
         SELECT
@@ -2906,7 +2906,7 @@ async function sendLike(req, res) {
         [targetUserId]
       );
 
-    if (targetResult.rows.length === 0) {
+    if (target.rows.length === 0) {
       return res.status(404).json({
         ok: false,
         error: 'El perfil ya no existe.'
@@ -2915,10 +2915,10 @@ async function sendLike(req, res) {
 
     await pool.query(
       `
-      INSERT INTO likes
+      INSERT INTO velo_likes
         (emisor_id, receptor_id, tipo, actualizado_en)
       VALUES
-        ($1,$2,$3,NOW())
+        ($1, $2, $3, NOW())
       ON CONFLICT (emisor_id, receptor_id)
       DO UPDATE SET
         tipo=EXCLUDED.tipo,
@@ -2935,7 +2935,7 @@ async function sendLike(req, res) {
       await pool.query(
         `
         SELECT id
-        FROM likes
+        FROM velo_likes
         WHERE emisor_id=$1
           AND receptor_id=$2
         LIMIT 1
@@ -2949,13 +2949,13 @@ async function sendLike(req, res) {
     let match = null;
 
     if (reciprocal.rows.length > 0) {
-      const a =
+      const usuarioA =
         Math.min(
           Number(sender.id),
           targetUserId
         );
 
-      const b =
+      const usuarioB =
         Math.max(
           Number(sender.id),
           targetUserId
@@ -2964,19 +2964,27 @@ async function sendLike(req, res) {
       const matchResult =
         await pool.query(
           `
-          INSERT INTO matches
+          INSERT INTO velo_matches
             (usuario_a_id, usuario_b_id)
           VALUES
-            ($1,$2)
+            ($1, $2)
           ON CONFLICT (usuario_a_id, usuario_b_id)
           DO UPDATE SET
             usuario_a_id=EXCLUDED.usuario_a_id
-          RETURNING id, usuario_a_id, usuario_b_id, creado_en
+          RETURNING
+            id,
+            usuario_a_id,
+            usuario_b_id,
+            creado_en
           `,
-          [a, b]
+          [
+            usuarioA,
+            usuarioB
+          ]
         );
 
-      match = matchResult.rows[0];
+      match =
+        matchResult.rows[0];
     }
 
     return res.status(200).json({
@@ -2984,12 +2992,13 @@ async function sendLike(req, res) {
       tipo,
       matched: Boolean(match),
       match,
-      target: targetResult.rows[0]
+      target:
+        target.rows[0]
     });
 
   } catch (e) {
     console.error(
-      'VELOAPP LIKE ERROR:',
+      'VELOAPP SOCIAL LIKE ERROR:',
       e
     );
 
@@ -3002,6 +3011,7 @@ async function sendLike(req, res) {
   }
 }
 
+
 async function getIncomingLikes(req, res) {
   try {
     await ensureSocialTables();
@@ -3010,13 +3020,6 @@ async function getIncomingLikes(req, res) {
       String(req.query?.email || '')
         .trim()
         .toLowerCase();
-
-    if (!email) {
-      return res.status(400).json({
-        ok: false,
-        error: 'Falta email.'
-      });
-    }
 
     const user =
       await getSocialUserByEmail(email);
@@ -3044,11 +3047,11 @@ async function getIncomingLikes(req, res) {
           u.foto_url,
           EXISTS(
             SELECT 1
-            FROM likes r
+            FROM velo_likes r
             WHERE r.emisor_id=$1
               AND r.receptor_id=l.emisor_id
           ) AS correspondido
-        FROM likes l
+        FROM velo_likes l
         JOIN usuarios u
           ON u.id=l.emisor_id
         WHERE l.receptor_id=$1
@@ -3068,7 +3071,7 @@ async function getIncomingLikes(req, res) {
 
   } catch (e) {
     console.error(
-      'VELOAPP INCOMING LIKES ERROR:',
+      'VELOAPP SOCIAL INCOMING LIKES ERROR:',
       e
     );
 
@@ -3081,6 +3084,7 @@ async function getIncomingLikes(req, res) {
   }
 }
 
+
 async function getMatches(req, res) {
   try {
     await ensureSocialTables();
@@ -3089,13 +3093,6 @@ async function getMatches(req, res) {
       String(req.query?.email || '')
         .trim()
         .toLowerCase();
-
-    if (!email) {
-      return res.status(400).json({
-        ok: false,
-        error: 'Falta email.'
-      });
-    }
 
     const user =
       await getSocialUserByEmail(email);
@@ -3122,8 +3119,8 @@ async function getMatches(req, res) {
           otro.foto_url,
           ultimo.texto AS ultimo_mensaje,
           ultimo.creado_en AS ultimo_mensaje_en,
-          COALESCE(no_leidos.total,0)::int AS no_leidos
-        FROM matches m
+          COALESCE(no_leidos.total, 0)::int AS no_leidos
+        FROM velo_matches m
         JOIN usuarios otro
           ON otro.id =
             CASE
@@ -3135,22 +3132,24 @@ async function getMatches(req, res) {
           SELECT
             mm.texto,
             mm.creado_en
-          FROM mensajes mm
+          FROM velo_mensajes mm
           WHERE mm.match_id=m.id
-          ORDER BY mm.creado_en DESC, mm.id DESC
+          ORDER BY
+            mm.creado_en DESC,
+            mm.id DESC
           LIMIT 1
         ) ultimo ON TRUE
         LEFT JOIN LATERAL (
-          SELECT COUNT(*) AS total
-          FROM mensajes mm2
+          SELECT
+            COUNT(*) AS total
+          FROM velo_mensajes mm2
           WHERE mm2.match_id=m.id
             AND mm2.emisor_id<>$1
             AND mm2.leido=FALSE
         ) no_leidos ON TRUE
         WHERE
           m.usuario_a_id=$1
-          OR
-          m.usuario_b_id=$1
+          OR m.usuario_b_id=$1
         ORDER BY
           COALESCE(
             ultimo.creado_en,
@@ -3169,7 +3168,7 @@ async function getMatches(req, res) {
 
   } catch (e) {
     console.error(
-      'VELOAPP MATCHES ERROR:',
+      'VELOAPP SOCIAL MATCHES ERROR:',
       e
     );
 
@@ -3181,6 +3180,7 @@ async function getMatches(req, res) {
     });
   }
 }
+
 
 async function getMessages(req, res) {
   const client =
@@ -3197,20 +3197,16 @@ async function getMessages(req, res) {
     const matchId =
       Number(req.query?.match_id);
 
-    if (!email || !Number.isInteger(matchId)) {
-      return res.status(400).json({
-        ok: false,
-        error: 'Falta email o match_id.'
-      });
-    }
-
     const user =
       await getSocialUserByEmail(email);
 
-    if (!user) {
-      return res.status(404).json({
+    if (
+      !user ||
+      !Number.isInteger(matchId)
+    ) {
+      return res.status(400).json({
         ok: false,
-        error: 'Usuario no encontrado.'
+        error: 'Falta usuario o match_id válido.'
       });
     }
 
@@ -3221,7 +3217,7 @@ async function getMessages(req, res) {
           id,
           usuario_a_id,
           usuario_b_id
-        FROM matches
+        FROM velo_matches
         WHERE id=$1
           AND (
             usuario_a_id=$2
@@ -3270,7 +3266,7 @@ async function getMessages(req, res) {
 
     await client.query(
       `
-      UPDATE mensajes
+      UPDATE velo_mensajes
       SET leido=TRUE
       WHERE match_id=$1
         AND emisor_id<>$2
@@ -3292,7 +3288,7 @@ async function getMessages(req, res) {
           texto,
           leido,
           creado_en
-        FROM mensajes
+        FROM velo_mensajes
         WHERE match_id=$1
         ORDER BY
           creado_en ASC,
@@ -3307,12 +3303,13 @@ async function getMessages(req, res) {
       match_id: matchId,
       other_user:
         otherResult.rows[0] || null,
-      messages: messages.rows
+      messages:
+        messages.rows
     });
 
   } catch (e) {
     console.error(
-      'VELOAPP GET MESSAGES ERROR:',
+      'VELOAPP SOCIAL GET MESSAGES ERROR:',
       e
     );
 
@@ -3327,6 +3324,7 @@ async function getMessages(req, res) {
     client.release();
   }
 }
+
 
 async function sendMessage(req, res) {
   try {
@@ -3381,7 +3379,7 @@ async function sendMessage(req, res) {
       await pool.query(
         `
         SELECT id
-        FROM matches
+        FROM velo_matches
         WHERE id=$1
           AND (
             usuario_a_id=$2
@@ -3406,10 +3404,10 @@ async function sendMessage(req, res) {
     const inserted =
       await pool.query(
         `
-        INSERT INTO mensajes
+        INSERT INTO velo_mensajes
           (match_id, emisor_id, texto)
         VALUES
-          ($1,$2,$3)
+          ($1, $2, $3)
         RETURNING
           id,
           match_id,
@@ -3427,12 +3425,13 @@ async function sendMessage(req, res) {
 
     return res.status(201).json({
       ok: true,
-      message: inserted.rows[0]
+      message:
+        inserted.rows[0]
     });
 
   } catch (e) {
     console.error(
-      'VELOAPP SEND MESSAGE ERROR:',
+      'VELOAPP SOCIAL SEND MESSAGE ERROR:',
       e
     );
 
@@ -3582,6 +3581,7 @@ export default async function handler(req, res) {
   }
 
 
+
   /*
     SOCIAL - LIKE / SUPERLIKE
   */
@@ -3599,7 +3599,7 @@ export default async function handler(req, res) {
 
 
   /*
-    SOCIAL - QUIÉN ME DIO LIKE
+    SOCIAL - LIKES RECIBIDOS
   */
 
   if (action === 'incoming-likes') {
@@ -3615,7 +3615,7 @@ export default async function handler(req, res) {
 
 
   /*
-    SOCIAL - MATCHES / CONVERSACIONES
+    SOCIAL - MATCHES
   */
 
   if (action === 'matches') {
@@ -3660,7 +3660,6 @@ export default async function handler(req, res) {
 
     return sendMessage(req, res);
   }
-
 
 
   /*
