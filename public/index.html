@@ -946,9 +946,13 @@ async function openConversation(matchId){
    const messagesHtml=messages.length
      ? messages.map(m=>{
          const mine=Number(m.emisor_id)===Number(currentUser.id);
-         return `<div class="flex ${mine?'justify-end':'justify-start'} mb-2">
-           <div class="max-w-[80%] px-4 py-2 rounded-2xl ${mine?'bg-[#D4B78F] text-black':'bg-black/40 border border-[#D4B78F]/15'}">
-             ${socialEscape(m.texto)}
+         const time = m.creado_en ? new Date(m.creado_en).toLocaleTimeString('es-UY',{hour:'2-digit',minute:'2-digit'}) : '';
+         return `<div class="flex ${mine?'justify-end':'justify-start'} mb-3">
+           <div class="max-w-[78%] flex flex-col ${mine?'items-end':'items-start'}">
+             <div class="px-4 py-2.5 shadow-sm ${mine?'bg-[#D4B78F] text-black rounded-2xl rounded-br-md':'bg-[#232329] text-[#F3EBDD] border border-[#D4B78F]/20 rounded-2xl rounded-bl-md'}">
+               <div class="whitespace-pre-wrap break-words">${socialEscape(m.texto)}</div>
+             </div>
+             ${time?`<div class="text-[10px] opacity-45 mt-1 px-1">${socialEscape(time)} · ${mine?'Vos':socialEscape(other.nombre||'Usuario')}</div>`:''}
            </div>
          </div>`;
        }).join('')
