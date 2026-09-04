@@ -164,7 +164,10 @@ EF2FCv3kU2MG5yJKk3D9b2s2DGge/modQd5eO30s8KLFSDWrRTpF55DH6IBLq9UNGwOV15XOKbN0e3aL
 </label>
 <label class="flex items-start gap-3 cursor-pointer">
 <input id="reg-terms" type="checkbox" required class="mt-1 accent-[#D4B78F]">
-<span class="text-[12px] leading-relaxed">Acepto los <b style="color:#D4B78F">Términos de uso</b>, la <b style="color:#D4B78F">Política de privacidad</b> y las normas de convivencia de VeloApp.</span>
+<span class="text-[12px] leading-relaxed">Acepto los
+<button type="button" onclick="event.preventDefault();event.stopPropagation();openLegal('terms')" class="underline font-bold hover:opacity-80" style="color:#D4B78F">Términos de uso</button>,
+la <button type="button" onclick="event.preventDefault();event.stopPropagation();openLegal('privacy')" class="underline font-bold hover:opacity-80" style="color:#D4B78F">Política de privacidad</button>
+y las <button type="button" onclick="event.preventDefault();event.stopPropagation();openLegal('community')" class="underline font-bold hover:opacity-80" style="color:#D4B78F">normas de convivencia</button> de VeloApp.</span>
 </label>
 </div>
 
@@ -252,7 +255,34 @@ EF2FCv3kU2MG5yJKk3D9b2s2DGge/modQd5eO30s8KLFSDWrRTpF55DH6IBLq9UNGwOV15XOKbN0e3aL
 </div>
 </div>
 
-<div id="toast" class="hidden fixed bottom-5 left-1/2 -translate-x-1/2 bg-[#D4B78F] text-black px-5 py-2.5 rounded-full text-sm font-semibold z-[80]"></div>
+
+<!-- LEGAL / 18+ -->
+<footer class="mt-8 border-t border-[#D4B78F]/15 bg-[#0B0B0D]">
+  <div class="max-w-[1600px] mx-auto px-4 lg:px-6 py-5 flex flex-col md:flex-row items-center justify-between gap-3 text-[11px]">
+    <div class="opacity-60 text-center md:text-left">🔞 VeloApp es exclusivamente para personas de 18 años o más.</div>
+    <div class="flex flex-wrap items-center justify-center gap-x-4 gap-y-2">
+      <button type="button" onclick="openLegal('terms')" class="underline hover:opacity-80" style="color:#D4B78F">Términos de uso</button>
+      <button type="button" onclick="openLegal('privacy')" class="underline hover:opacity-80" style="color:#D4B78F">Política de privacidad</button>
+      <button type="button" onclick="openLegal('community')" class="underline hover:opacity-80" style="color:#D4B78F">Normas de convivencia</button>
+    </div>
+    <div class="opacity-40">© 2026 VeloApp.store</div>
+  </div>
+</footer>
+
+<div id="legal-modal" class="hidden fixed inset-0 z-[120] bg-black/85 backdrop-blur-sm p-4 overflow-y-auto">
+  <div class="max-w-3xl mx-auto my-8 bg-[#111113] border border-[#D4B78F]/25 rounded-[24px] shadow-2xl overflow-hidden">
+    <div class="sticky top-0 bg-[#111113]/95 backdrop-blur flex items-center justify-between gap-4 px-5 py-4 border-b border-[#D4B78F]/15">
+      <div>
+        <div id="legal-title" class="serif text-xl font-bold" style="color:#D4B78F">Información legal</div>
+        <div class="text-[10px] opacity-45 mt-1">Última actualización: 4 de septiembre de 2026</div>
+      </div>
+      <button type="button" onclick="closeLegal()" class="w-10 h-10 rounded-full border border-[#D4B78F]/20 text-xl">×</button>
+    </div>
+    <div id="legal-content" class="p-5 sm:p-7 text-[13px] leading-relaxed space-y-4 max-h-[75vh] overflow-y-auto"></div>
+  </div>
+</div>
+
+<div id="toast" class="hidden fixed bottom-5 left-1/2 -translate-x-1/2 bg-[#D4B78F] text-black px-5 py-2.5 rounded-full text-sm font-semibold z-[130]"></div>
 
 <script>
 // DATA
@@ -299,7 +329,101 @@ function renderAuth(){
  }
 }
 function openModal(t){closeModals(); document.getElementById('modal-'+t).classList.remove('hidden');}
+
 function closeModals(){document.getElementById('modal-login').classList.add('hidden'); document.getElementById('modal-register').classList.add('hidden');}
+
+const VELO_LEGAL_CONTENT = {
+  terms: {
+    title: 'Términos de uso',
+    html: `
+      <p>Estos Términos regulan el acceso y uso de VeloApp.store. Al crear una cuenta o utilizar el servicio, aceptás estas condiciones.</p>
+      <h3 class="font-bold text-base" style="color:#D4B78F">1. Requisito de edad</h3>
+      <p>VeloApp es exclusivamente para personas de 18 años o más. Al registrarte declarás que cumplís este requisito. Las cuentas de menores de edad pueden ser suspendidas o eliminadas.</p>
+      <h3 class="font-bold text-base" style="color:#D4B78F">2. Tu cuenta</h3>
+      <p>Debés proporcionar información verdadera y mantener el control de tus credenciales. Sos responsable de la actividad realizada desde tu cuenta y de avisar si detectás un uso no autorizado.</p>
+      <h3 class="font-bold text-base" style="color:#D4B78F">3. Uso de la plataforma</h3>
+      <p>VeloApp facilita conexiones entre personas. No garantiza compatibilidad, identidad, intenciones, conducta ni resultados de otros usuarios. Usá criterio y precaución al interactuar o reunirte con alguien.</p>
+      <h3 class="font-bold text-base" style="color:#D4B78F">4. Contenido y conducta</h3>
+      <p>No se permite contenido ilegal, amenazas, acoso, suplantación de identidad, estafas, spam, explotación sexual, contenido sexual que involucre menores, violencia extrema ni cualquier uso que perjudique a otros usuarios o a la plataforma.</p>
+      <h3 class="font-bold text-base" style="color:#D4B78F">5. Fotos y contenido del usuario</h3>
+      <p>Conservás la responsabilidad sobre lo que subís. Confirmás que tenés derecho a utilizar ese contenido y nos autorizás a mostrarlo dentro de VeloApp mientras tu cuenta o contenido permanezcan activos, únicamente para operar y promocionar las funciones del servicio.</p>
+      <h3 class="font-bold text-base" style="color:#D4B78F">6. Planes pagos</h3>
+      <p>Gold y Platinum pueden ofrecerse como suscripciones recurrentes. El precio, período y beneficios se muestran antes del pago. Cuando el cobro se procesa mediante PayPal, la renovación y cancelación se gestionan de acuerdo con las opciones disponibles en PayPal.</p>
+      <h3 class="font-bold text-base" style="color:#D4B78F">7. Suspensión o cierre</h3>
+      <p>Podemos limitar, suspender o cerrar cuentas que incumplan estos Términos, las Normas de convivencia, requisitos legales o medidas razonables de seguridad.</p>
+      <h3 class="font-bold text-base" style="color:#D4B78F">8. Disponibilidad</h3>
+      <p>VeloApp puede cambiar, interrumpir o actualizar funciones. Procuramos mantener el servicio disponible, pero no garantizamos funcionamiento ininterrumpido o libre de errores.</p>
+      <h3 class="font-bold text-base" style="color:#D4B78F">9. Seguridad personal</h3>
+      <p>No envíes dinero ni información financiera a personas que conozcas en la plataforma. Para una primera reunión, preferí un lugar público e informá a alguien de confianza.</p>
+      <h3 class="font-bold text-base" style="color:#D4B78F">10. Cambios</h3>
+      <p>Podemos actualizar estos Términos. La fecha de actualización se mostrará en esta sección. El uso continuado del servicio después de un cambio implica aceptación de la versión vigente.</p>
+    `
+  },
+  privacy: {
+    title: 'Política de privacidad',
+    html: `
+      <p>Esta Política explica, de forma resumida y clara, qué datos utiliza VeloApp y para qué.</p>
+      <h3 class="font-bold text-base" style="color:#D4B78F">1. Datos que proporcionás</h3>
+      <p>Podemos tratar datos de cuenta y perfil como nombre, email, país, ciudad, edad, género, preferencias, biografía y fotos que decidas subir.</p>
+      <h3 class="font-bold text-base" style="color:#D4B78F">2. Datos de uso</h3>
+      <p>Para operar funciones sociales podemos registrar likes, matches, mensajes, estado de membresía y datos técnicos básicos necesarios para seguridad, diagnóstico y funcionamiento del servicio.</p>
+      <h3 class="font-bold text-base" style="color:#D4B78F">3. Finalidades</h3>
+      <p>Usamos los datos para crear y mostrar tu perfil, permitir búsquedas y coincidencias, habilitar mensajería, gestionar membresías, prevenir abuso y mejorar el funcionamiento de VeloApp.</p>
+      <h3 class="font-bold text-base" style="color:#D4B78F">4. Proveedores</h3>
+      <p>VeloApp puede utilizar proveedores tecnológicos para alojamiento, base de datos, almacenamiento de imágenes y pagos. Esos proveedores procesan la información necesaria para prestar sus servicios.</p>
+      <h3 class="font-bold text-base" style="color:#D4B78F">5. Pagos</h3>
+      <p>Los pagos internacionales pueden procesarse mediante PayPal. VeloApp no necesita almacenar los datos completos de tu tarjeta para completar ese flujo de pago.</p>
+      <h3 class="font-bold text-base" style="color:#D4B78F">6. Visibilidad del perfil</h3>
+      <p>La información que agregás a tu perfil puede ser visible para otros usuarios de VeloApp según las funciones y filtros disponibles. No publiques datos que no quieras compartir con otros miembros.</p>
+      <h3 class="font-bold text-base" style="color:#D4B78F">7. Conservación y eliminación</h3>
+      <p>Los datos se conservan mientras sean necesarios para operar tu cuenta, cumplir obligaciones aplicables, resolver disputas o prevenir abuso. Cuando se habiliten herramientas específicas de eliminación, podrás utilizarlas para solicitar el cierre o borrado correspondiente.</p>
+      <h3 class="font-bold text-base" style="color:#D4B78F">8. Seguridad</h3>
+      <p>Aplicamos medidas técnicas y operativas razonables para proteger la información, aunque ningún sistema conectado a Internet puede garantizar seguridad absoluta.</p>
+      <h3 class="font-bold text-base" style="color:#D4B78F">9. Menores</h3>
+      <p>VeloApp no está dirigido a menores de 18 años. Si detectamos una cuenta perteneciente a una persona menor de edad, podremos suspenderla o eliminarla.</p>
+      <h3 class="font-bold text-base" style="color:#D4B78F">10. Cambios en esta Política</h3>
+      <p>Podemos actualizar esta Política cuando cambien nuestras funciones o prácticas. La versión vigente se identificará con su fecha de actualización.</p>
+    `
+  },
+  community: {
+    title: 'Normas de convivencia',
+    html: `
+      <p>Queremos que VeloApp sea un espacio adulto, respetuoso y seguro. Estas reglas se aplican a perfiles, fotos, likes, mensajes y cualquier interacción dentro de la plataforma.</p>
+      <h3 class="font-bold text-base" style="color:#D4B78F">✓ Sé auténtico</h3>
+      <p>No suplantes a otra persona, no uses identidades falsas para engañar ni publiques fotografías de terceros sin autorización.</p>
+      <h3 class="font-bold text-base" style="color:#D4B78F">✓ Respetá el consentimiento</h3>
+      <p>No presiones, amenaces ni acoses. Un match o un like no implica consentimiento para conversaciones sexuales, envío de contenido explícito o contacto fuera de VeloApp.</p>
+      <h3 class="font-bold text-base" style="color:#D4B78F">✓ Cero menores</h3>
+      <p>Está prohibido registrarse siendo menor de 18 años, intentar contactar menores o publicar, solicitar o distribuir cualquier contenido sexual relacionado con menores.</p>
+      <h3 class="font-bold text-base" style="color:#D4B78F">✓ Sin odio ni violencia</h3>
+      <p>No se permiten amenazas, incitación a la violencia, hostigamiento ni ataques degradantes contra otras personas.</p>
+      <h3 class="font-bold text-base" style="color:#D4B78F">✓ Sin estafas ni spam</h3>
+      <p>No solicites dinero, credenciales, datos bancarios, inversiones, criptomonedas o transferencias mediante engaño. Tampoco uses VeloApp para spam, publicidad masiva o captación fraudulenta.</p>
+      <h3 class="font-bold text-base" style="color:#D4B78F">✓ Protegé tu seguridad</h3>
+      <p>No compartas contraseñas, documentos, datos bancarios ni información sensible. Si una interacción te resulta sospechosa, cortá el contacto y conservá la evidencia necesaria para reportarla.</p>
+      <h3 class="font-bold text-base" style="color:#D4B78F">Consecuencias</h3>
+      <p>El incumplimiento puede resultar en limitación de funciones, suspensión o eliminación de la cuenta, según la gravedad y el contexto.</p>
+    `
+  }
+};
+
+function openLegal(type){
+  const item=VELO_LEGAL_CONTENT[type] || VELO_LEGAL_CONTENT.terms;
+  const modal=document.getElementById('legal-modal');
+  const title=document.getElementById('legal-title');
+  const content=document.getElementById('legal-content');
+  if(!modal||!title||!content) return;
+  title.innerText=item.title;
+  content.innerHTML=item.html;
+  modal.classList.remove('hidden');
+  document.body.style.overflow='hidden';
+}
+
+function closeLegal(){
+  document.getElementById('legal-modal')?.classList.add('hidden');
+  document.body.style.overflow='';
+}
+
 
 let profilePhotos=[];
 
@@ -1289,6 +1413,7 @@ function updateGold(){
 }
 function checkPaymentReturn(){ handlePayPalReturn(); }
 function showToast(m){const t=document.getElementById('toast');t.innerText=m;t.classList.remove('hidden');setTimeout(()=>t.classList.add('hidden'),2800);}
+document.addEventListener('keydown',e=>{if(e.key==='Escape') closeLegal();});
 init();
 setTimeout(refreshIncomingLikesBadge,900);
 </script>
