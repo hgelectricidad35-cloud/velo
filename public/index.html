@@ -560,7 +560,8 @@ async function handleLogin(e){
    }
 
    currentUser={
-     name:data.user.nombre,
+     id:data.user.id,
+      name:data.user.nombre,
      email:data.user.email,
      city:data.user.ciudad || '',
      membership:data.user.membresia || 'free'
@@ -629,7 +630,8 @@ async function handleRegister(e){
    }
 
    currentUser={
-     name:data.user.nombre,
+     id:data.user.id,
+      name:data.user.nombre,
      email:data.user.email,
      country:data.user.pais || country,
      city:data.user.ciudad || city,
@@ -945,7 +947,11 @@ async function openConversation(matchId){
 
    const messagesHtml=messages.length
      ? messages.map(m=>{
-         const mine=Number(m.emisor_id)===Number(currentUser.id);
+         const otherId=Number(other.id);
+         const savedId=Number(currentUser.id);
+         const mine=Number.isFinite(savedId)
+           ? Number(m.emisor_id)===savedId
+           : (Number.isFinite(otherId) ? Number(m.emisor_id)!==otherId : false);
          const time = m.creado_en ? new Date(m.creado_en).toLocaleTimeString('es-UY',{hour:'2-digit',minute:'2-digit'}) : '';
          return `<div class="flex ${mine?'justify-end':'justify-start'} mb-3">
            <div class="max-w-[78%] flex flex-col ${mine?'items-end':'items-start'}">
